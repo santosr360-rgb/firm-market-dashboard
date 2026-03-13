@@ -297,6 +297,7 @@ let cdLeft       = CFG.interval;
 let sortCol      = -1;
 let sortAsc      = true;
 let colMap       = [];   // maps visual column index → data column index (-1 = not sortable)
+let lastPerfData = null; // cache of most recent performance fetch — re-applied after every sort
 let portfolio    = null;
 let serverOk     = false;
 
@@ -595,6 +596,7 @@ function loadSavedPortfolio() {
 
 function clearPortfolio() {
   portfolio = null;
+  lastPerfData = null;
   localStorage.removeItem('schwabPortfolio');
   document.getElementById('port-label').textContent = 'NO FILE LOADED';
   document.getElementById('port-nodatamsg').style.display = '';
@@ -659,6 +661,7 @@ function setPerfStatus(msg) {
 
 function updatePerfCells(perfData, symIdx) {
   if (!portfolio) return;
+  lastPerfData = perfData; // cache so re-renders (sort) can re-apply without re-fetching
   // Match by data-sym attribute (not row index) so sorting doesn't break it
   Object.entries(perfData).forEach(([sym, p]) => {
     const tr = document.querySelector(`#port-tbody tr[data-sym="${CSS.escape(sym)}"]`);
@@ -811,6 +814,9 @@ function renderPortfolio(sc=-1) {
 
   document.getElementById('port-nodatamsg').style.display = 'none';
   document.getElementById('port-table').style.display     = 'table';
+
+  // Re-apply cached perf data so sorting doesn't wipe the numbers
+  if (lastPerfData) updatePerfCells(lastPerfData, findSymbolCol(headers));
 }
 
 function doSort(vi) {
