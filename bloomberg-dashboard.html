@@ -489,13 +489,17 @@ async function yfFetch(symbols) {
 async function fredFetch(seriesId) {
   if (!CFG.fredKey) return null;
   const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${CFG.fredKey}&limit=1&sort_order=desc&file_type=json`;
-  try {
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    const d = await r.json();
-    const obs = d?.observations?.[0];
-    return (obs && obs.value !== '.') ? { val: parseFloat(obs.value), date: obs.date } : null;
-  } catch { return null; }
+  // Try direct first, then via proxy (needed when opening as local file)
+  for (const reqUrl of [url, CFG.proxy + encodeURIComponent(url)]) {
+    try {
+      const r = await fetch(reqUrl);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const obs = d?.observations?.[0];
+      if (obs && obs.value !== '.') return { val: parseFloat(obs.value), date: obs.date };
+    } catch { /* try next */ }
+  }
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
