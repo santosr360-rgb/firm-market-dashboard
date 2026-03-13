@@ -234,13 +234,14 @@ const CFG = {
   interval: parseInt(localStorage.getItem('interval') || '60'),
 };
 
-// CORS proxy cascade — tried in order until one works
-const PROXIES = [
+// Local proxy server (started via server.py / "Start Dashboard.command")
+const LOCAL_PROXY = 'http://localhost:8765/proxy?url=';
+// External CORS proxies as fallback (used only if local server isn't running)
+const EXT_PROXIES = [
   'https://corsproxy.io/?',
   'https://api.allorigins.win/raw?url=',
-  'https://api.codetabs.com/v1/proxy?quest=',
 ];
-let workingProxy = localStorage.getItem('workingProxy') || PROXIES[0];
+let _localAvail = null; // null=unknown, true/false after first check
 
 // ── WATCHLISTS ─────────────────────────────────────────────────
 const INDICES = [
@@ -341,41 +342,56 @@ function clock() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ROBUST FETCH — tries multiple CORS proxies
+// ROBUST FETCH — local server first, then external proxies
 // ═══════════════════════════════════════════════════════════════
-async function robustFetch(url, timeoutMs=9000) {
-  // Build list: working proxy first, then others, then direct
-  const proxies = [workingProxy, ...PROXIES.filter(p=>p!==workingProxy)];
+async function timedFetch(reqUrl, ms=10000) {
+  const ctrl = new AbortController();
+  const tid  = setTimeout(()=>ctrl.abort(), ms);
+  try {
+    const r = await fetch(reqUrl, { signal:ctrl.signal, headers:{Accept:'application/json'} });
+    clearTimeout(tid);
+    return r.ok ? r : null;
+  } catch { clearTimeout(tid); return null; }
+}
 
-  for (const proxy of proxies) {
-    try {
-      const ctrl = new AbortController();
-      const tid  = setTimeout(()=>ctrl.abort(), timeoutMs);
-      const reqUrl = proxy + encodeURIComponent(url);
-      const r = await fetch(reqUrl, { signal:ctrl.signal, headers:{Accept:'application/json'} });
-      clearTimeout(tid);
-      if (r.ok) {
-        if (proxy !== workingProxy) {
-          workingProxy = proxy;
-          localStorage.setItem('workingProxy', proxy);
-          document.getElementById('sb-proxy').textContent = new URL(proxy).hostname;
-          document.getElementById('proxy-status').textContent = 'Data via: ' + new URL(proxy).hostname;
-        }
-        return r;
-      }
-    } catch { /* try next */ }
-  }
-
-  // Last resort: direct (works if server has CORS headers like FRED)
+async function checkLocal() {
+  if (_localAvail !== null) return _localAvail;
+  // Probe the local server with a tiny request
   try {
     const ctrl = new AbortController();
-    const tid  = setTimeout(()=>ctrl.abort(), timeoutMs);
-    const r    = await fetch(url, { signal:ctrl.signal });
-    clearTimeout(tid);
-    if (r.ok) return r;
-  } catch {}
+    setTimeout(()=>ctrl.abort(), 1500);
+    const r = await fetch('http://localhost:8765/', { signal:ctrl.signal });
+    _localAvail = r.ok;
+  } catch { _localAvail = false; }
+  const el = document.getElementById('sb-proxy');
+  const el2 = document.getElementById('proxy-status');
+  if (_localAvail) {
+    el.textContent  = 'LOCAL SERVER ✓';
+    el2.textContent = 'Data via: local proxy server';
+  } else {
+    el.textContent  = 'NO LOCAL SERVER';
+    el2.textContent = 'Start "Start Dashboard.command" for reliable data';
+  }
+  return _localAvail;
+}
 
-  return null;
+async function robustFetch(url, timeoutMs=10000) {
+  const local = await checkLocal();
+
+  // Try local proxy first (always works, no CORS issues)
+  if (local) {
+    const r = await timedFetch(LOCAL_PROXY + encodeURIComponent(url), timeoutMs);
+    if (r) return r;
+  }
+
+  // Fall back to external proxies
+  for (const px of EXT_PROXIES) {
+    const r = await timedFetch(px + encodeURIComponent(url), timeoutMs);
+    if (r) return r;
+  }
+
+  // Direct (works for FRED which has CORS headers)
+  return await timedFetch(url, timeoutMs);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -785,7 +801,6 @@ function toggleSettings() {
   if (open) {
     document.getElementById('s-fred').value    =CFG.fredKey;
     document.getElementById('s-interval').value=CFG.interval;
-    document.getElementById('proxy-status').textContent='Active proxy: '+new URL(workingProxy).hostname;
   }
 }
 function saveSettings() {
@@ -833,7 +848,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     g.innerHTML+=`<div class="idx-card"><div class="idx-name">${i.fl} ${i.name}</div><div class="idx-sym">${i.sym}</div><div class="idx-price blink">...</div><div class="idx-chg flat">--</div></div>`;
   });
 
-  document.getElementById('sb-proxy').textContent=new URL(workingProxy).hostname;
+  document.getElementById('sb-proxy').textContent='CHECKING...';
   initYieldChart();
 
   // Pre-load saved FRED key into CONFIG field hint
