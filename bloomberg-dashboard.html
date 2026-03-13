@@ -296,6 +296,7 @@ let cdTimer      = null;
 let cdLeft       = CFG.interval;
 let sortCol      = -1;
 let sortAsc      = true;
+let colMap       = [];   // maps visual column index → data column index (-1 = not sortable)
 let portfolio    = null;
 let serverOk     = false;
 
@@ -680,8 +681,29 @@ function renderPortfolio(sc=-1) {
   document.getElementById('sb-pos').textContent = rows.length+' POSITIONS';
   document.getElementById('btn-clear').style.display = '';
 
+  const symIdx    = findSymbolCol(headers);
+  const dayPctIdx = headers.findIndex(h => /day.?change.*%/i.test(h));
+  // All columns except the symbol column (it goes first)
+  const otherIdxs = headers.map((_,i) => i).filter(i => i !== symIdx);
+
+  // Build colMap: visual column index → data column index (-1 = perf/computed, not sortable)
+  colMap = [];
+  if (symIdx >= 0) {
+    colMap.push(symIdx);   // 0: Symbol
+    colMap.push(-1);       // 1: DAY %  (computed from dayPctIdx — sort not supported)
+    colMap.push(-1);       // 2: WEEK %
+    colMap.push(-1);       // 3: MONTH %
+    colMap.push(-1);       // 4: YTD %
+    colMap.push(-1);       // 5: 1YR %
+    otherIdxs.forEach(i => colMap.push(i));
+  } else {
+    headers.forEach((_,i) => colMap.push(i));
+    PERF_COLS.forEach(() => colMap.push(-1));
+  }
+
+  // Sort by data column index sc
   let display = [...rows];
-  if (sc>=0 && sc<headers.length) {
+  if (sc >= 0 && sc < headers.length) {
     display.sort((a,b)=>{
       const av=parseFloat(String(a[sc]).replace(/[$,%()]/g,''));
       const bv=parseFloat(String(b[sc]).replace(/[$,%()]/g,''));
@@ -690,34 +712,87 @@ function renderPortfolio(sc=-1) {
     });
   }
 
-  const allHdrs = [...headers, ...PERF_COLS];
+  // Build display headers
+  const dispHdrs = symIdx >= 0
+    ? [headers[symIdx], 'DAY %', 'WEEK %', 'MONTH %', 'YTD %', '1YR %', ...otherIdxs.map(i=>headers[i])]
+    : [...headers, ...PERF_COLS];
   document.getElementById('port-thead').innerHTML =
-    '<tr>'+allHdrs.map((h,i)=>`<th onclick="doSort(${i})">${h}${sortCol===i?(sortAsc?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+    '<tr>'+dispHdrs.map((h,i)=>`<th onclick="doSort(${i})">${h}${sortCol===i?(sortAsc?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
 
-  const symIdx = findSymbolCol(headers);
-  const tbody  = document.getElementById('port-tbody');
+  const tbody = document.getElementById('port-tbody');
   tbody.innerHTML = '';
   display.forEach(row=>{
-    const tr  = document.createElement('tr');
+    const tr = document.createElement('tr');
     const sym = symIdx >= 0 ? row[symIdx] : '';
     if (sym) tr.setAttribute('data-sym', sym);
-    // Original columns
-    row.forEach((cell,ci)=>{
-      const td  = document.createElement('td');
-      const hdr = (headers[ci]||'').toLowerCase();
-      const nv  = parseFloat(String(cell).replace(/[$,%()]/g,''));
-      if ((hdr.includes('change')||hdr.includes('gain')||hdr.includes('loss'))&&!isNaN(nv)&&nv!==0)
-        td.className = nv>0?'up':'down';
-      td.textContent = cell;
-      tr.appendChild(td);
-    });
-    // Performance columns
-    PERF_COLS.forEach((_,ci)=>{
-      const td = document.createElement('td');
-      td.setAttribute('data-perf', ci);
-      td.innerHTML = '<span class="flat blink">...</span>';
-      tr.appendChild(td);
-    });
+
+    if (symIdx >= 0) {
+      // Symbol cell
+      const tdSym = document.createElement('td');
+      tdSym.textContent = row[symIdx];
+      tr.appendChild(tdSym);
+
+      // DAY % cell — Schwab exports day change % as a decimal (e.g. -0.0102 = -1.02%)
+      const tdDay = document.createElement('td');
+      if (dayPctIdx >= 0) {
+        const rawVal = parseFloat(String(row[dayPctIdx]).replace(/[%,\s]/g,''));
+        if (!isNaN(rawVal)) {
+          tdDay.innerHTML = pctCell(rawVal * 100);
+        } else {
+          tdDay.innerHTML = '<span class="flat">—</span>';
+        }
+      } else {
+        tdDay.innerHTML = '<span class="flat">—</span>';
+      }
+      tr.appendChild(tdDay);
+
+      // WEEK / MONTH / YTD / 1YR perf cells (filled by loadPerformance)
+      [0,1,2,3].forEach(ci => {
+        const td = document.createElement('td');
+        td.setAttribute('data-perf', ci);
+        td.innerHTML = '<span class="flat blink">...</span>';
+        tr.appendChild(td);
+      });
+
+      // Remaining original columns (all except sym)
+      otherIdxs.forEach(ci => {
+        const td = document.createElement('td');
+        const hdr = (headers[ci]||'').toLowerCase();
+        const cell = row[ci];
+        // Format Day Change % column as a real percentage
+        if (ci === dayPctIdx) {
+          const nv = parseFloat(String(cell).replace(/[%,\s]/g,''));
+          if (!isNaN(nv)) {
+            const pv = nv * 100;
+            td.textContent = (pv >= 0 ? '+' : '') + pv.toFixed(2) + '%';
+            td.className = pv > 0 ? 'up' : pv < 0 ? 'down' : 'flat';
+          } else { td.textContent = cell; }
+        } else {
+          const nv = parseFloat(String(cell).replace(/[$,%()]/g,''));
+          if ((hdr.includes('change')||hdr.includes('gain')||hdr.includes('loss'))&&!isNaN(nv)&&nv!==0)
+            td.className = nv > 0 ? 'up' : 'down';
+          td.textContent = cell;
+        }
+        tr.appendChild(td);
+      });
+    } else {
+      // Fallback: original layout
+      row.forEach((cell,ci)=>{
+        const td = document.createElement('td');
+        const hdr = (headers[ci]||'').toLowerCase();
+        const nv = parseFloat(String(cell).replace(/[$,%()]/g,''));
+        if ((hdr.includes('change')||hdr.includes('gain')||hdr.includes('loss'))&&!isNaN(nv)&&nv!==0)
+          td.className = nv > 0 ? 'up' : 'down';
+        td.textContent = cell;
+        tr.appendChild(td);
+      });
+      PERF_COLS.forEach((_,ci)=>{
+        const td = document.createElement('td');
+        td.setAttribute('data-perf', ci);
+        td.innerHTML = '<span class="flat blink">...</span>';
+        tr.appendChild(td);
+      });
+    }
     tbody.appendChild(tr);
   });
 
@@ -738,9 +813,10 @@ function renderPortfolio(sc=-1) {
   document.getElementById('port-table').style.display     = 'table';
 }
 
-function doSort(ci) {
-  if (sortCol===ci) sortAsc=!sortAsc; else { sortCol=ci; sortAsc=true; }
-  renderPortfolio(ci < (portfolio?.headers?.length||0) ? ci : -1);
+function doSort(vi) {
+  if (sortCol===vi) sortAsc=!sortAsc; else { sortCol=vi; sortAsc=true; }
+  const dc = (colMap[vi] >= 0) ? colMap[vi] : -1;
+  renderPortfolio(dc);
 }
 
 // ═══════════════════════════════════════════════════════════════════
