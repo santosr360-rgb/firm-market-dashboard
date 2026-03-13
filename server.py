@@ -14,6 +14,7 @@ import os
 import json
 import time
 import sys
+import concurrent.futures
 
 PORT = 8765
 DIR  = os.path.dirname(os.path.abspath(__file__))
@@ -36,6 +37,27 @@ except ImportError:
     print('  Run:  pip3 install yfinance\n')
     sys.exit(1)
 
+def _quote_one(sym):
+    """Fetch a single symbol's current quote via fast_info."""
+    try:
+        fi    = yf.Ticker(sym).fast_info
+        price = fi.last_price
+        prev  = fi.previous_close
+        if price is None or prev is None:
+            return sym, None
+        import math
+        if math.isnan(price) or math.isnan(prev) or prev == 0:
+            return sym, None
+        chg = price - prev
+        return sym, {
+            'price':     round(float(price), 6),
+            'change':    round(float(chg), 6),
+            'changePct': round(float(chg / prev * 100), 4),
+        }
+    except Exception:
+        return sym, None
+
+
 def get_quotes(symbols):
     """Return {sym: {price, change, changePct}} for a list of symbols."""
     key = 'q:' + ','.join(sorted(symbols))
@@ -44,49 +66,12 @@ def get_quotes(symbols):
         return cached
 
     result = {}
-    try:
-        raw = yf.download(
-            symbols,
-            period='5d',
-            interval='1d',
-            auto_adjust=True,
-            progress=False,
-            threads=True,
-        )
-        closes = raw['Close'] if 'Close' in raw.columns else raw
-
-        if len(symbols) == 1:
-            sym   = symbols[0]
-            vals  = closes.dropna()
-            if len(vals) >= 2:
-                price = float(vals.iloc[-1])
-                prev  = float(vals.iloc[-2])
-                chg   = price - prev
-                result[sym] = {
-                    'price':     round(price, 4),
-                    'change':    round(chg, 4),
-                    'changePct': round(chg / prev * 100, 4) if prev else 0,
-                }
-        else:
-            for sym in symbols:
-                try:
-                    col  = closes[sym] if sym in closes.columns else None
-                    if col is None:
-                        continue
-                    vals = col.dropna()
-                    if len(vals) >= 2:
-                        price = float(vals.iloc[-1])
-                        prev  = float(vals.iloc[-2])
-                        chg   = price - prev
-                        result[sym] = {
-                            'price':     round(price, 4),
-                            'change':    round(chg, 4),
-                            'changePct': round(chg / prev * 100, 4) if prev else 0,
-                        }
-                except Exception:
-                    pass
-    except Exception as e:
-        print(f'  Quote error: {e}')
+    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+        futures = {ex.submit(_quote_one, sym): sym for sym in symbols}
+        for fut in concurrent.futures.as_completed(futures, timeout=20):
+            sym, data = fut.result()
+            if data:
+                result[sym] = data
 
     cache_set(key, result)
     return result
@@ -100,9 +85,13 @@ def get_history(symbol):
         return cached
 
     try:
-        raw    = yf.download(symbol, period='1y', interval='1d',
-                             auto_adjust=True, progress=False)
-        closes = raw['Close'].dropna()
+        raw = yf.download(symbol, period='1y', interval='1d',
+                          auto_adjust=True, progress=False)
+        # Handle both flat and MultiIndex columns
+        if isinstance(raw.columns, __import__('pandas').MultiIndex):
+            closes = raw['Close'][symbol].dropna()
+        else:
+            closes = raw['Close'].dropna()
 
         if len(closes) < 10:
             return None
@@ -116,7 +105,7 @@ def get_history(symbol):
             except Exception:
                 return None
 
-        # YTD — last close before Jan 1 of current year
+        # YTD — find last close of previous year
         current_year = time.localtime().tm_year
         ytd_chg = None
         dates = list(closes.index)
@@ -128,10 +117,10 @@ def get_history(symbol):
                 break
 
         result = {
-            'weekChg':  pct(-6),   # ~5 trading days
-            'monthChg': pct(-22),  # ~21 trading days
+            'weekChg':  pct(-6),
+            'monthChg': pct(-22),
             'ytdChg':   ytd_chg,
-            'yearChg':  pct(0),    # first data point ≈ 1 year ago
+            'yearChg':  pct(0),
         }
         cache_set(key, result)
         return result
