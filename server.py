@@ -77,57 +77,83 @@ def get_quotes(symbols):
     return result
 
 
-def get_history(symbol):
-    """Return {weekChg, monthChg, ytdChg, yearChg} for one symbol."""
-    key = 'h:' + symbol
-    cached = cache_get(key, 3600)
-    if cached is not None:
-        return cached
-
-    try:
-        raw = yf.download(symbol, period='1y', interval='1d',
-                          auto_adjust=True, progress=False)
-        # Handle both flat and MultiIndex columns
-        if isinstance(raw.columns, __import__('pandas').MultiIndex):
-            closes = raw['Close'][symbol].dropna()
+def get_history_batch(symbols):
+    """Return {sym: {weekChg,monthChg,ytdChg,yearChg}} for many symbols at once.
+    Uses weekly bars to minimise data transfer and maximise speed."""
+    result  = {}
+    to_fetch = []
+    for sym in symbols:
+        c = cache_get('h:' + sym, 3600)
+        if c is not None:
+            result[sym] = c
         else:
-            closes = raw['Close'].dropna()
+            to_fetch.append(sym)
 
-        if len(closes) < 10:
-            return None
-
-        current = float(closes.iloc[-1])
-
-        def pct(idx):
-            try:
-                old = float(closes.iloc[idx])
-                return round((current - old) / old * 100, 2) if old else None
-            except Exception:
-                return None
-
-        # YTD — find last close of previous year
-        current_year = time.localtime().tm_year
-        ytd_chg = None
-        dates = list(closes.index)
-        for i, dt in enumerate(dates):
-            yr = dt.year if hasattr(dt, 'year') else time.localtime(dt).tm_year
-            if yr >= current_year and i > 0:
-                old = float(closes.iloc[i - 1])
-                ytd_chg = round((current - old) / old * 100, 2) if old else None
-                break
-
-        result = {
-            'weekChg':  pct(-6),
-            'monthChg': pct(-22),
-            'ytdChg':   ytd_chg,
-            'yearChg':  pct(0),
-        }
-        cache_set(key, result)
+    if not to_fetch:
         return result
 
+    try:
+        import pandas as pd
+        raw = yf.download(
+            to_fetch,
+            period='1y',
+            interval='1wk',
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+        if raw.empty:
+            return result
+
+        # Normalise to a DataFrame where columns = symbols
+        if isinstance(raw.columns, pd.MultiIndex):
+            closes_df = raw['Close']
+        else:
+            closes_df = raw[['Close']].rename(columns={'Close': to_fetch[0]})
+
+        current_year = time.localtime().tm_year
+
+        for sym in to_fetch:
+            try:
+                col = closes_df.get(sym)
+                if col is None:
+                    continue
+                closes = col.dropna()
+                if len(closes) < 4:
+                    continue
+
+                current = float(closes.iloc[-1])
+
+                def pct(idx):
+                    try:
+                        old = float(closes.iloc[idx])
+                        return round((current - old) / old * 100, 2) if old else None
+                    except Exception:
+                        return None
+
+                ytd_chg = None
+                for i, dt in enumerate(closes.index):
+                    yr = dt.year if hasattr(dt, 'year') else current_year
+                    if yr >= current_year and i > 0:
+                        old = float(closes.iloc[i - 1])
+                        ytd_chg = round((current - old) / old * 100, 2) if old else None
+                        break
+
+                h = {
+                    'weekChg':  pct(-2),   # 1 weekly bar ago
+                    'monthChg': pct(-5),   # ~4 weekly bars ago
+                    'ytdChg':   ytd_chg,
+                    'yearChg':  pct(0),    # first bar ~1yr ago
+                }
+                result[sym] = h
+                cache_set('h:' + sym, h)
+            except Exception:
+                pass
+
     except Exception as e:
-        print(f'  History error {symbol}: {e}')
-        return None
+        print(f'  History batch error: {e}')
+
+    return result
 
 
 # ── HTTP Handler ──────────────────────────────────────────────
@@ -161,15 +187,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json(data)
             return
 
-        # /api/history?s=AAPL,MSFT
+        # /api/history?s=AAPL,MSFT,...  (all symbols in one call)
         if parsed.path == '/api/history':
             symbols = [s.strip() for s in qs.get('s', [''])[0].split(',') if s.strip()]
-            result  = {}
-            for sym in symbols:
-                h = get_history(sym)
-                if h:
-                    result[sym] = h
-            self._json(result)
+            self._json(get_history_batch(symbols))
             return
 
         # /api/fred?key=KEY&series=DGS10

@@ -377,47 +377,80 @@ async function checkServer() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// RENDER INDICES
+// BUILD STATIC GRIDS ONCE, UPDATE IN-PLACE ON REFRESH
 // ═══════════════════════════════════════════════════════════════════
-async function updateIndices() {
-  document.getElementById('idx-status').innerHTML = '<span class="blink">UPDATING...</span>';
-  const data = await apiQuotes(INDICES.map(i=>i.sym));
+function symId(sym) { return sym.replace(/[^a-zA-Z0-9]/g,'_'); }
+
+function buildIndicesGrid() {
   const grid = document.getElementById('indices-grid');
   grid.innerHTML = '';
   INDICES.forEach(idx=>{
-    const q  = data[idx.sym];
-    const dp = (q?.price||0)>1000?0:2;
+    const id = symId(idx.sym);
     grid.innerHTML += `<div class="idx-card">
       <div class="idx-name">${idx.fl} ${idx.name}</div>
       <div class="idx-sym">${idx.sym}</div>
-      <div class="idx-price">${q?num(q.price,dp):'---'}</div>
-      <div class="idx-chg">${chgHtml(q?.change,q?.changePct)}</div>
+      <div class="idx-price blink" id="ip-${id}">...</div>
+      <div class="idx-chg flat"    id="ic-${id}">--</div>
     </div>`;
   });
-  const el = document.getElementById('idx-status');
-  el.innerHTML = Object.keys(data).length ? '<span style="color:var(--green)">LIVE ●</span>' : '<span style="color:var(--red)">ERROR</span>';
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// RENDER COMMODITIES + FX
-// ═══════════════════════════════════════════════════════════════════
+function buildMarketGrid() {
+  const grid  = document.getElementById('market-grid');
+  grid.innerHTML = '';
+  const items = [...COMMODITIES, ...FX];
+  items.forEach(item=>{
+    const id = symId(item.sym);
+    grid.innerHTML += `<div class="mkt-card">
+      <div class="mkt-label">${item.name}</div>
+      <div class="mkt-price flat" id="mp-${id}">---</div>
+      <div class="mkt-chg  flat" id="mc-${id}">--</div>
+    </div>`;
+  });
+}
+
+async function updateIndices() {
+  document.getElementById('idx-status').innerHTML = '<span class="blink">UPDATING...</span>';
+  const data = await apiQuotes(INDICES.map(i=>i.sym));
+  if (!Object.keys(data).length) {
+    document.getElementById('idx-status').innerHTML = '<span style="color:var(--red)">ERROR — server may be loading</span>';
+    return;
+  }
+  INDICES.forEach(idx=>{
+    const q  = data[idx.sym];
+    const id = symId(idx.sym);
+    const pEl = document.getElementById('ip-'+id);
+    const cEl = document.getElementById('ic-'+id);
+    if (!pEl || !cEl || !q) return;
+    const dp = q.price > 1000 ? 0 : 2;
+    pEl.textContent = num(q.price, dp);
+    pEl.classList.remove('blink');
+    cEl.innerHTML   = chgHtml(q.change, q.changePct);
+  });
+  document.getElementById('idx-status').innerHTML = '<span style="color:var(--green)">LIVE ●</span>';
+}
+
 async function updateMarket() {
   document.getElementById('mkt-status').innerHTML = '<span class="blink">UPDATING...</span>';
   const items = [...COMMODITIES, ...FX];
   const data  = await apiQuotes(items.map(i=>i.sym));
-  const grid  = document.getElementById('market-grid');
-  grid.innerHTML = '';
+  if (!Object.keys(data).length) {
+    document.getElementById('mkt-status').innerHTML = '<span style="color:var(--red)">ERROR</span>';
+    return;
+  }
   items.forEach(item=>{
     const q  = data[item.sym];
-    const cls = !q ? 'flat' : q.changePct>0 ? 'up' : q.changePct<0 ? 'down' : 'flat';
-    grid.innerHTML += `<div class="mkt-card">
-      <div class="mkt-label">${item.name}</div>
-      <div class="mkt-price ${cls}">${q?num(q.price,item.dp):'---'}</div>
-      <div class="mkt-chg ${cls}">${q?pctFmt(q.changePct):'--'}</div>
-    </div>`;
+    const id = symId(item.sym);
+    const pEl = document.getElementById('mp-'+id);
+    const cEl = document.getElementById('mc-'+id);
+    if (!pEl || !cEl || !q) return;
+    const cls = q.changePct>0?'up':q.changePct<0?'down':'flat';
+    pEl.textContent = num(q.price, item.dp);
+    pEl.className   = 'mkt-price ' + cls;
+    cEl.textContent = pctFmt(q.changePct);
+    cEl.className   = 'mkt-chg ' + cls;
   });
-  const el = document.getElementById('mkt-status');
-  el.innerHTML = Object.keys(data).length ? '<span style="color:var(--green)">LIVE ●</span>' : '<span style="color:var(--red)">ERROR</span>';
+  document.getElementById('mkt-status').innerHTML = '<span style="color:var(--green)">LIVE ●</span>';
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -561,20 +594,22 @@ function clearPortfolio() {
 
 // ── Fetch performance for all portfolio symbols ───────────────
 async function loadPerformance() {
-  if (!portfolio || !serverOk) return;
+  if (!portfolio) return;
+  // Wait for server to be ready if needed
+  if (!serverOk) {
+    await checkServer();
+    if (!serverOk) return;
+  }
   const symIdx = portfolio.headers.findIndex(h=>/^symbol$/i.test(h.trim()));
   if (symIdx===-1) return;
-  const symbols = [...new Set(portfolio.rows.map(r=>r[symIdx]).filter(s=>s&&s.length<10&&!/--/.test(s)))];
+  const symbols = [...new Set(
+    portfolio.rows.map(r=>r[symIdx]).filter(s=>s&&s.length<10&&!/--|^--/.test(s))
+  )];
   if (!symbols.length) return;
 
-  // Fetch in batches of 10
-  for (let i=0; i<symbols.length; i+=10) {
-    const batch = symbols.slice(i, i+10);
-    const data  = await apiHistory(batch);
-    // Update cells live
-    updatePerfCells(data, symIdx);
-    if (i+10 < symbols.length) await new Promise(r=>setTimeout(r,500));
-  }
+  // Send ALL symbols in one request — server does a single batch download
+  const data = await apiHistory(symbols);
+  updatePerfCells(data, symIdx);
 }
 
 function updatePerfCells(perfData, symIdx) {
@@ -710,13 +745,8 @@ async function fetchAllData() {
 // ═══════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', ()=>{
   clock(); setInterval(clock, 1000);
-
-  // Skeleton index cards
-  const g = document.getElementById('indices-grid');
-  INDICES.forEach(i=>{
-    g.innerHTML += `<div class="idx-card"><div class="idx-name">${i.fl} ${i.name}</div><div class="idx-sym">${i.sym}</div><div class="idx-price blink">...</div><div class="idx-chg flat">--</div></div>`;
-  });
-
+  buildIndicesGrid();
+  buildMarketGrid();
   initYieldChart();
   loadSavedPortfolio();
   fetchAllData();
