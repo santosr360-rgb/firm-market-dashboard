@@ -545,10 +545,21 @@ function handleFile(evt) {
 function parseSchwab(raw, fname) {
   const kw = ['symbol','description','quantity','price','market value','% of account','day change'];
   let hdrIdx=-1, headers=[];
-  for (let i=0; i<Math.min(raw.length,25); i++) {
+  // First pass: require a cell that starts with "symbol" (matches "Symbol/CUSIP", "Symbol", etc.)
+  // This prevents matching the Schwab summary row ("Total Market Value", "Total Value Day Change")
+  for (let i=0; i<Math.min(raw.length,30); i++) {
     const cells = raw[i].map(c=>String(c).toLowerCase().trim());
-    if (cells.filter(c=>kw.some(k=>c.includes(k))).length >= 2) {
+    if (cells.some(c=>/^symbol/.test(c))) {
       hdrIdx=i; headers=raw[i].map(c=>String(c).trim()); break;
+    }
+  }
+  // Fallback: any row with 3+ keyword matches
+  if (hdrIdx===-1) {
+    for (let i=0; i<Math.min(raw.length,30); i++) {
+      const cells = raw[i].map(c=>String(c).toLowerCase().trim());
+      if (cells.filter(c=>kw.some(k=>c.includes(k))).length >= 3) {
+        hdrIdx=i; headers=raw[i].map(c=>String(c).trim()); break;
+      }
     }
   }
   if (hdrIdx===-1) {
