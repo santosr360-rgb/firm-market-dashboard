@@ -689,22 +689,26 @@ function renderPortfolio(sc=-1) {
   // All columns except the symbol column (it goes first)
   const otherIdxs = headers.map((_,i) => i).filter(i => i !== symIdx);
 
-  // Build colMap: visual column index → data column index (-1 = perf/computed, not sortable)
+  // Build colMap: visual index → data index, or negative sentinel for perf cols:
+  //   -1 = DAY% (not sortable), -2 = WEEK%, -3 = MONTH%, -4 = YTD%, -5 = 1YR%
   colMap = [];
   if (symIdx >= 0) {
     colMap.push(symIdx);   // 0: Symbol
-    colMap.push(-1);       // 1: DAY %  (computed from dayPctIdx — sort not supported)
-    colMap.push(-1);       // 2: WEEK %
-    colMap.push(-1);       // 3: MONTH %
-    colMap.push(-1);       // 4: YTD %
-    colMap.push(-1);       // 5: 1YR %
+    colMap.push(-1);       // 1: DAY %
+    colMap.push(-2);       // 2: WEEK %
+    colMap.push(-3);       // 3: MONTH %
+    colMap.push(-4);       // 4: YTD %
+    colMap.push(-5);       // 5: 1YR %
     otherIdxs.forEach(i => colMap.push(i));
   } else {
     headers.forEach((_,i) => colMap.push(i));
     PERF_COLS.forEach(() => colMap.push(-1));
   }
 
-  // Sort by data column index sc
+  // perf key by sentinel value
+  const perfKeys = {'-2':'weekChg', '-3':'monthChg', '-4':'ytdChg', '-5':'yearChg'};
+
+  // Sort: sc >= 0 → data column; sc <= -2 → perf column via lastPerfData
   let display = [...rows];
   if (sc >= 0 && sc < headers.length) {
     display.sort((a,b)=>{
@@ -712,6 +716,16 @@ function renderPortfolio(sc=-1) {
       const bv=parseFloat(String(b[sc]).replace(/[$,%()]/g,''));
       if (!isNaN(av)&&!isNaN(bv)) return sortAsc?av-bv:bv-av;
       return sortAsc?String(a[sc]).localeCompare(String(b[sc])):String(b[sc]).localeCompare(String(a[sc]));
+    });
+  } else if (sc <= -2 && lastPerfData && symIdx >= 0) {
+    const key = perfKeys[String(sc)];
+    display.sort((a,b)=>{
+      const av = lastPerfData[a[symIdx]]?.[key] ?? null;
+      const bv = lastPerfData[b[symIdx]]?.[key] ?? null;
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return sortAsc ? av - bv : bv - av;
     });
   }
 
@@ -821,8 +835,7 @@ function renderPortfolio(sc=-1) {
 
 function doSort(vi) {
   if (sortCol===vi) sortAsc=!sortAsc; else { sortCol=vi; sortAsc=true; }
-  const dc = (colMap[vi] >= 0) ? colMap[vi] : -1;
-  renderPortfolio(dc);
+  renderPortfolio(colMap[vi] ?? -1);
 }
 
 // ═══════════════════════════════════════════════════════════════════
