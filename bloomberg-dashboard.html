@@ -8,226 +8,118 @@
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <style>
     :root {
-      --bg:      #080808;
-      --bg2:     #101010;
-      --bg3:     #181818;
-      --bg4:     #1e1e1e;
-      --border:  #252525;
-      --orange:  #ff6600;
-      --amber:   #ffb000;
-      --green:   #00cc44;
-      --red:     #ff3333;
-      --cyan:    #00cccc;
-      --blue:    #4488ff;
-      --text:    #c8c8c8;
-      --dim:     #555555;
-      --white:   #f0f0f0;
+      --bg:     #080808;
+      --bg2:    #101010;
+      --bg3:    #181818;
+      --bg4:    #1e1e1e;
+      --border: #252525;
+      --orange: #ff6600;
+      --amber:  #ffb000;
+      --green:  #00cc44;
+      --red:    #ff3333;
+      --cyan:   #00cccc;
+      --text:   #c8c8c8;
+      --dim:    #555555;
+      --white:  #f0f0f0;
     }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:var(--bg); color:var(--text); font-family:'Courier New',Courier,monospace; font-size:11px; min-height:100vh; }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* HEADER */
+    #header { background:var(--bg2); border-bottom:2px solid var(--orange); padding:6px 14px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:100; }
+    .h-title { color:var(--orange); font-size:15px; font-weight:bold; letter-spacing:4px; }
+    .h-meta  { display:flex; gap:14px; align-items:center; font-size:9px; color:var(--dim); flex-wrap:wrap; }
+    .h-meta b { color:var(--amber); }
+    #h-time { color:var(--cyan); }
+    #h-next { color:var(--green); }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
-      min-height: 100vh;
-    }
+    /* SETTINGS */
+    #settings-drawer { background:var(--bg2); border-bottom:1px solid var(--border); padding:0 14px; max-height:0; overflow:hidden; transition:max-height 0.2s,padding 0.2s; }
+    #settings-drawer.open { max-height:140px; padding:10px 14px; }
+    .s-grid { display:grid; grid-template-columns:2fr 2fr 1fr 1fr; gap:10px; align-items:end; }
+    .s-item label { color:var(--dim); font-size:9px; display:block; margin-bottom:3px; }
+    .s-item input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:4px 6px; width:100%; font-family:'Courier New',monospace; font-size:10px; }
 
-    /* ── HEADER ──────────────────────────────────────────────── */
-    #header {
-      background: var(--bg2);
-      border-bottom: 2px solid var(--orange);
-      padding: 6px 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    .h-title { color: var(--orange); font-size: 15px; font-weight: bold; letter-spacing: 4px; }
-    .h-meta  { display: flex; gap: 18px; align-items: center; font-size: 9px; color: var(--dim); }
-    .h-meta b { color: var(--amber); }
-    .h-meta #h-time { color: var(--cyan); }
-    .h-meta #h-next { color: var(--green); }
+    /* BUTTONS */
+    .btn { background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:3px 10px; cursor:pointer; font-family:'Courier New',monospace; font-size:10px; letter-spacing:1px; white-space:nowrap; }
+    .btn:hover { border-color:var(--orange); color:var(--orange); }
+    .btn-accent { border-color:var(--orange); color:var(--orange); }
+    .btn-accent:hover { background:var(--orange); color:var(--bg); }
 
-    /* ── SETTINGS DRAWER ─────────────────────────────────────── */
-    #settings-drawer {
-      background: var(--bg2);
-      border-bottom: 1px solid var(--border);
-      padding: 0 14px;
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.2s, padding 0.2s;
-    }
-    #settings-drawer.open { max-height: 120px; padding: 10px 14px; }
-    .s-grid { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: 10px; align-items: end; }
-    .s-item label { color: var(--dim); font-size: 9px; display: block; margin-bottom: 3px; }
-    .s-item input {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 4px 6px;
-      width: 100%;
-      font-family: 'Courier New', monospace;
-      font-size: 10px;
-    }
+    /* MAIN */
+    #main { padding:6px 8px 36px; display:flex; flex-direction:column; gap:6px; }
 
-    /* ── BUTTONS ─────────────────────────────────────────────── */
-    .btn {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 3px 10px;
-      cursor: pointer;
-      font-family: 'Courier New', monospace;
-      font-size: 10px;
-      letter-spacing: 1px;
-      white-space: nowrap;
-    }
-    .btn:hover { border-color: var(--orange); color: var(--orange); }
-    .btn-accent { border-color: var(--orange); color: var(--orange); }
-    .btn-accent:hover { background: var(--orange); color: var(--bg); }
+    /* PANEL */
+    .panel { background:var(--bg2); border:1px solid var(--border); }
+    .panel-hdr { background:var(--bg3); border-bottom:1px solid var(--border); padding:4px 10px; display:flex; justify-content:space-between; align-items:center; }
+    .panel-title { color:var(--orange); font-size:9px; font-weight:bold; letter-spacing:2px; }
+    .panel-sub   { font-size:9px; color:var(--dim); }
+    .panel-body  { padding:6px 8px; }
 
-    /* ── MAIN GRID ───────────────────────────────────────────── */
-    #main {
-      padding: 6px 8px 36px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
+    /* INDICES */
+    #indices-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(158px,1fr)); gap:3px; }
+    .idx-card { background:var(--bg3); border:1px solid var(--border); padding:6px 8px; }
+    .idx-card:hover { border-color:var(--amber); }
+    .idx-name  { font-size:9px; color:var(--amber); font-weight:bold; letter-spacing:1px; }
+    .idx-sym   { font-size:8px; color:var(--dim); }
+    .idx-price { font-size:14px; font-weight:bold; color:var(--white); margin:2px 0; }
+    .idx-chg   { font-size:10px; }
 
-    /* ── PANEL ───────────────────────────────────────────────── */
-    .panel { background: var(--bg2); border: 1px solid var(--border); }
-    .panel-hdr {
-      background: var(--bg3);
-      border-bottom: 1px solid var(--border);
-      padding: 4px 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .panel-title { color: var(--orange); font-size: 9px; font-weight: bold; letter-spacing: 2px; }
-    .panel-sub   { font-size: 9px; color: var(--dim); }
-    .panel-body  { padding: 6px 8px; }
+    /* MARKET */
+    #market-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:3px; }
+    .mkt-card  { background:var(--bg3); border:1px solid var(--border); padding:6px 8px; text-align:center; }
+    .mkt-label { font-size:9px; color:var(--cyan); letter-spacing:1px; font-weight:bold; }
+    .mkt-price { font-size:13px; font-weight:bold; margin:2px 0; color:var(--white); }
+    .mkt-chg   { font-size:10px; }
 
-    /* ── INDICES GRID ────────────────────────────────────────── */
-    #indices-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
-      gap: 3px;
-    }
-    .idx-card {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      padding: 6px 8px;
-      transition: border-color 0.15s;
-    }
-    .idx-card:hover { border-color: var(--amber); }
-    .idx-flag-name { font-size: 9px; color: var(--amber); font-weight: bold; letter-spacing: 1px; }
-    .idx-sym  { font-size: 8px; color: var(--dim); }
-    .idx-price { font-size: 14px; font-weight: bold; color: var(--white); margin: 2px 0; }
-    .idx-chg  { font-size: 10px; }
+    /* YIELD */
+    .yield-layout { display:grid; grid-template-columns:1fr 175px; gap:8px; }
+    .yield-chart-wrap { height:200px; position:relative; }
+    .yield-tbl { display:flex; flex-direction:column; gap:2px; overflow-y:auto; max-height:200px; }
+    .yield-row { display:flex; justify-content:space-between; padding:2px 6px; background:var(--bg3); border:1px solid var(--border); }
+    .y-tenor { color:var(--dim); font-size:10px; }
+    .y-val   { color:var(--amber); font-size:10px; font-weight:bold; }
+    .yield-note { font-size:8px; color:var(--dim); margin-top:4px; text-align:center; line-height:1.5; }
 
-    /* ── MARKET ROW (commodities + FX) ──────────────────────── */
-    #market-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-      gap: 3px;
-    }
-    .mkt-card {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      padding: 6px 8px;
-      text-align: center;
-    }
-    .mkt-label { font-size: 9px; color: var(--cyan); letter-spacing: 1px; font-weight: bold; }
-    .mkt-price { font-size: 13px; font-weight: bold; margin: 2px 0; color: var(--white); }
-    .mkt-chg   { font-size: 10px; }
+    /* PORTFOLIO */
+    .port-controls { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+    #file-input { display:none; }
+    #port-stats { font-size:10px; color:var(--dim); display:flex; gap:12px; flex-wrap:wrap; }
+    #port-stats .sv { color:var(--amber); }
+    .tbl-wrap { overflow-x:auto; max-height:520px; overflow-y:auto; }
+    table { width:100%; border-collapse:collapse; font-size:11px; }
+    thead { position:sticky; top:0; background:var(--bg3); z-index:10; }
+    th { padding:5px 8px; text-align:right; color:var(--orange); font-size:9px; letter-spacing:1px; border-bottom:1px solid var(--border); cursor:pointer; white-space:nowrap; user-select:none; }
+    th:hover { color:var(--amber); }
+    th:first-child, th:nth-child(2) { text-align:left; }
+    tbody tr { border-bottom:1px solid #1a1a1a; }
+    tbody tr:hover { background:var(--bg4); }
+    td { padding:4px 8px; text-align:right; white-space:nowrap; }
+    td:first-child { text-align:left; color:var(--amber); font-weight:bold; }
+    td:nth-child(2) { text-align:left; color:var(--text); max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+    .no-data-msg { text-align:center; padding:40px 0; color:var(--dim); line-height:2.2; }
+    .no-data-msg .hint { color:var(--amber); font-size:10px; }
+    .perf-loading { color:var(--dim); font-style:italic; }
 
-    /* ── YIELD CURVE ─────────────────────────────────────────── */
-    .yield-layout { display: grid; grid-template-columns: 1fr 170px; gap: 8px; }
-    .yield-chart-wrap { height: 200px; position: relative; }
-    .yield-tbl { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 200px; }
-    .yield-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 2px 6px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-    }
-    .y-tenor { color: var(--dim); font-size: 10px; }
-    .y-val   { color: var(--amber); font-size: 10px; font-weight: bold; }
-    .yield-note { font-size: 8px; color: var(--dim); margin-top: 4px; text-align: center; }
+    /* COLORS */
+    .up   { color:var(--green)  !important; }
+    .down { color:var(--red)    !important; }
+    .flat { color:var(--dim)    !important; }
 
-    /* ── PORTFOLIO ───────────────────────────────────────────── */
-    .port-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
-    #file-input { display: none; }
-    #port-stats { font-size: 10px; color: var(--dim); display: flex; gap: 12px; flex-wrap: wrap; }
-    #port-stats .sv { color: var(--amber); }
-    .tbl-wrap { overflow-x: auto; max-height: 520px; overflow-y: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    thead { position: sticky; top: 0; background: var(--bg3); z-index: 10; }
-    th {
-      padding: 5px 8px;
-      text-align: right;
-      color: var(--orange);
-      font-size: 9px;
-      letter-spacing: 1px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      white-space: nowrap;
-      user-select: none;
-    }
-    th:hover { color: var(--amber); }
-    th:first-child, th:nth-child(2) { text-align: left; }
-    tbody tr { border-bottom: 1px solid #1a1a1a; }
-    tbody tr:hover { background: var(--bg4); }
-    td { padding: 4px 8px; text-align: right; white-space: nowrap; }
-    td:first-child { text-align: left; color: var(--amber); font-weight: bold; }
-    td:nth-child(2) { text-align: left; color: var(--text); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
-    .no-data-msg {
-      text-align: center;
-      padding: 40px 0;
-      color: var(--dim);
-      line-height: 2;
-    }
-    .no-data-msg .hint { color: var(--amber); font-size: 10px; }
+    /* STATUS BAR */
+    #status-bar { position:fixed; bottom:0; left:0; right:0; background:var(--bg3); border-top:1px solid var(--border); padding:3px 12px; display:flex; gap:20px; font-size:9px; color:var(--dim); z-index:100; }
+    #status-bar span { color:var(--cyan); }
 
-    /* ── COLORS ──────────────────────────────────────────────── */
-    .up   { color: var(--green) !important; }
-    .down { color: var(--red)   !important; }
-    .flat { color: var(--dim)   !important; }
-
-    /* ── STATUS BAR ──────────────────────────────────────────── */
-    #status-bar {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      background: var(--bg3);
-      border-top: 1px solid var(--border);
-      padding: 3px 12px;
-      display: flex;
-      gap: 20px;
-      font-size: 9px;
-      color: var(--dim);
-      z-index: 100;
-    }
-    #status-bar span { color: var(--cyan); }
-
-    /* ── BLINK ───────────────────────────────────────────────── */
-    .blink { animation: bk 1.2s infinite; }
+    /* MISC */
+    .blink { animation:bk 1.2s infinite; }
     @keyframes bk { 0%,100%{opacity:1} 50%{opacity:0.25} }
-
-    /* ── SCROLLBAR ───────────────────────────────────────────── */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: #333; }
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:var(--bg); }
+    ::-webkit-scrollbar-thumb { background:#333; }
   </style>
 </head>
 <body>
 
-<!-- ── HEADER ─────────────────────────────────────────────────── -->
 <div id="header">
   <div class="h-title">&#9632; BLOOMBERG TERMINAL</div>
   <div class="h-meta">
@@ -240,54 +132,44 @@
   </div>
 </div>
 
-<!-- ── SETTINGS DRAWER ────────────────────────────────────────── -->
 <div id="settings-drawer">
   <div class="s-grid">
     <div class="s-item">
-      <label>FRED API KEY &mdash; free at fred.stlouisfed.org (for full yield curve)</label>
-      <input type="password" id="s-fred" placeholder="e.g. abcd1234efgh5678..." />
+      <label>FRED API KEY &mdash; free at fred.stlouisfed.org (for full 11-pt yield curve)</label>
+      <input type="password" id="s-fred" placeholder="e.g. 0318acc805889c485823f81b97d9e61f" />
     </div>
     <div class="s-item">
-      <label>CORS PROXY URL</label>
-      <input type="text" id="s-proxy" value="https://corsproxy.io/?" />
-    </div>
-    <div class="s-item">
-      <label>REFRESH INTERVAL (sec)</label>
+      <label>REFRESH INTERVAL (seconds)</label>
       <input type="number" id="s-interval" value="60" min="30" max="600" />
     </div>
-    <div class="s-item" style="display:flex;gap:6px;">
+    <div class="s-item" style="display:flex;gap:6px;align-items:flex-end;">
       <button class="btn btn-accent" onclick="saveSettings()">SAVE</button>
       <button class="btn" onclick="toggleSettings()">CLOSE</button>
+    </div>
+    <div class="s-item" style="align-self:flex-end;">
+      <div style="font-size:9px;color:var(--dim)" id="proxy-status">Data: checking...</div>
     </div>
   </div>
 </div>
 
-<!-- ── MAIN ───────────────────────────────────────────────────── -->
 <div id="main">
 
-  <!-- GLOBAL INDICES -->
   <div class="panel">
     <div class="panel-hdr">
       <span class="panel-title">GLOBAL INDICES</span>
       <span class="panel-sub blink" id="idx-status">LOADING...</span>
     </div>
-    <div class="panel-body">
-      <div id="indices-grid"></div>
-    </div>
+    <div class="panel-body"><div id="indices-grid"></div></div>
   </div>
 
-  <!-- COMMODITIES & FX -->
   <div class="panel">
     <div class="panel-hdr">
       <span class="panel-title">COMMODITIES &amp; FX</span>
       <span class="panel-sub blink" id="mkt-status">LOADING...</span>
     </div>
-    <div class="panel-body">
-      <div id="market-grid"></div>
-    </div>
+    <div class="panel-body"><div id="market-grid"></div></div>
   </div>
 
-  <!-- TREASURY YIELD CURVE -->
   <div class="panel">
     <div class="panel-hdr">
       <span class="panel-title">US TREASURY YIELD CURVE</span>
@@ -295,9 +177,7 @@
     </div>
     <div class="panel-body">
       <div class="yield-layout">
-        <div class="yield-chart-wrap">
-          <canvas id="yield-chart"></canvas>
-        </div>
+        <div class="yield-chart-wrap"><canvas id="yield-chart"></canvas></div>
         <div>
           <div class="yield-tbl" id="yield-tbl"></div>
           <div class="yield-note" id="yield-note"></div>
@@ -306,7 +186,6 @@
     </div>
   </div>
 
-  <!-- PORTFOLIO POSITIONS -->
   <div class="panel">
     <div class="panel-hdr">
       <span class="panel-title">PORTFOLIO POSITIONS &mdash; SCHWAB</span>
@@ -318,15 +197,15 @@
         <button class="btn btn-accent" onclick="document.getElementById('file-input').click()">
           &#9650; UPLOAD SCHWAB EXPORT
         </button>
+        <button class="btn" onclick="clearPortfolio()" id="btn-clear-port" style="display:none">&#10005; CLEAR</button>
         <div id="port-stats"></div>
       </div>
       <div class="tbl-wrap">
         <div class="no-data-msg" id="port-nodatamsg">
           <div>NO PORTFOLIO DATA LOADED</div>
           <div class="hint">Upload your Schwab positions export (.xlsx / .csv)</div>
-          <div class="hint" style="color:var(--dim);margin-top:6px;">
-            In Schwab: Accounts &rarr; Positions &rarr; Export (top-right icon)
-          </div>
+          <div class="hint" style="color:var(--dim);margin-top:4px;">Schwab: Accounts &rarr; Positions &rarr; Export icon (top-right)</div>
+          <div class="hint" style="color:var(--dim);">Positions persist until you upload a new file or click CLEAR</div>
         </div>
         <table id="port-table" style="display:none;">
           <thead id="port-thead"></thead>
@@ -336,85 +215,86 @@
     </div>
   </div>
 
-</div><!-- /main -->
+</div>
 
-<!-- ── STATUS BAR ──────────────────────────────────────────────── -->
 <div id="status-bar">
-  <div>MARKET DATA <span>15-MIN DELAYED (FREE)</span></div>
-  <div>YIELDS <span id="sb-yields">EOD / FRED</span></div>
-  <div>SOURCE <span>YAHOO FINANCE + FRED</span></div>
+  <div>MARKET DATA <span>15-MIN DELAYED</span></div>
+  <div>YIELDS <span id="sb-yields">--</span></div>
+  <div>SOURCE <span>YAHOO FINANCE / FRED</span></div>
   <div>POSITIONS <span id="sb-pos">--</span></div>
+  <div>PROXY <span id="sb-proxy">--</span></div>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// CONFIGURATION
+// CONFIG
 // ═══════════════════════════════════════════════════════════════
 const CFG = {
-  fredKey:    localStorage.getItem('fredKey')    || '',
-  proxy:      localStorage.getItem('proxy')      || 'https://corsproxy.io/?',
-  interval:   parseInt(localStorage.getItem('interval') || '60'),
+  fredKey:  localStorage.getItem('fredKey')  || '',
+  interval: parseInt(localStorage.getItem('interval') || '60'),
 };
+
+// CORS proxy cascade — tried in order until one works
+const PROXIES = [
+  'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url=',
+  'https://api.codetabs.com/v1/proxy?quest=',
+];
+let workingProxy = localStorage.getItem('workingProxy') || PROXIES[0];
 
 // ── WATCHLISTS ─────────────────────────────────────────────────
 const INDICES = [
-  { sym: '^GSPC',     name: 'S&P 500',      fl: '🇺🇸' },
-  { sym: '^DJI',      name: 'DOW JONES',    fl: '🇺🇸' },
-  { sym: '^IXIC',     name: 'NASDAQ COMP',  fl: '🇺🇸' },
-  { sym: '^RUT',      name: 'RUSSELL 2000', fl: '🇺🇸' },
-  { sym: '^FTSE',     name: 'FTSE 100',     fl: '🇬🇧' },
-  { sym: '^GDAXI',    name: 'DAX',          fl: '🇩🇪' },
-  { sym: '^FCHI',     name: 'CAC 40',       fl: '🇫🇷' },
-  { sym: '^STOXX50E', name: 'EURO STOXX 50',fl: '🇪🇺' },
-  { sym: '^N225',     name: 'NIKKEI 225',   fl: '🇯🇵' },
-  { sym: '^HSI',      name: 'HANG SENG',    fl: '🇭🇰' },
-  { sym: '000001.SS', name: 'SHANGHAI',     fl: '🇨🇳' },
-  { sym: '^AXJO',     name: 'ASX 200',      fl: '🇦🇺' },
-  { sym: '^BSESN',    name: 'BSE SENSEX',   fl: '🇮🇳' },
-  { sym: '^IBEX',     name: 'IBEX 35',      fl: '🇪🇸' },
-  { sym: '^AEX',      name: 'AEX',          fl: '🇳🇱' },
-  { sym: '^KS11',     name: 'KOSPI',        fl: '🇰🇷' },
+  { sym:'^GSPC',      name:'S&P 500',      fl:'🇺🇸' },
+  { sym:'^DJI',       name:'DOW JONES',    fl:'🇺🇸' },
+  { sym:'^IXIC',      name:'NASDAQ COMP',  fl:'🇺🇸' },
+  { sym:'^RUT',       name:'RUSSELL 2000', fl:'🇺🇸' },
+  { sym:'^FTSE',      name:'FTSE 100',     fl:'🇬🇧' },
+  { sym:'^GDAXI',     name:'DAX',          fl:'🇩🇪' },
+  { sym:'^FCHI',      name:'CAC 40',       fl:'🇫🇷' },
+  { sym:'^STOXX50E',  name:'EURO STOXX 50',fl:'🇪🇺' },
+  { sym:'^N225',      name:'NIKKEI 225',   fl:'🇯🇵' },
+  { sym:'^HSI',       name:'HANG SENG',    fl:'🇭🇰' },
+  { sym:'000001.SS',  name:'SHANGHAI',     fl:'🇨🇳' },
+  { sym:'^AXJO',      name:'ASX 200',      fl:'🇦🇺' },
+  { sym:'^BSESN',     name:'BSE SENSEX',   fl:'🇮🇳' },
+  { sym:'^IBEX',      name:'IBEX 35',      fl:'🇪🇸' },
+  { sym:'^AEX',       name:'AEX',          fl:'🇳🇱' },
+  { sym:'^KS11',      name:'KOSPI',        fl:'🇰🇷' },
 ];
-
 const COMMODITIES = [
-  { sym: 'GC=F',  name: 'GOLD',      dp: 2 },
-  { sym: 'SI=F',  name: 'SILVER',    dp: 3 },
-  { sym: 'CL=F',  name: 'WTI CRUDE', dp: 2 },
-  { sym: 'NG=F',  name: 'NAT GAS',   dp: 3 },
-  { sym: 'HG=F',  name: 'COPPER',    dp: 3 },
-  { sym: 'PL=F',  name: 'PLATINUM',  dp: 2 },
+  { sym:'GC=F', name:'GOLD',      dp:2 },
+  { sym:'SI=F', name:'SILVER',    dp:3 },
+  { sym:'CL=F', name:'WTI CRUDE', dp:2 },
+  { sym:'NG=F', name:'NAT GAS',   dp:3 },
+  { sym:'HG=F', name:'COPPER',    dp:3 },
+  { sym:'PL=F', name:'PLATINUM',  dp:2 },
 ];
-
 const FX = [
-  { sym: 'EURUSD=X', name: 'EUR/USD', dp: 4 },
-  { sym: 'USDJPY=X', name: 'USD/JPY', dp: 2 },
-  { sym: 'GBPUSD=X', name: 'GBP/USD', dp: 4 },
-  { sym: 'USDCNY=X', name: 'USD/CNY', dp: 4 },
-  { sym: 'USDCHF=X', name: 'USD/CHF', dp: 4 },
-  { sym: 'DX-Y.NYB', name: 'DXY',     dp: 2 },
+  { sym:'EURUSD=X', name:'EUR/USD', dp:4 },
+  { sym:'USDJPY=X', name:'USD/JPY', dp:2 },
+  { sym:'GBPUSD=X', name:'GBP/USD', dp:4 },
+  { sym:'USDCNY=X', name:'USD/CNY', dp:4 },
+  { sym:'USDCHF=X', name:'USD/CHF', dp:4 },
+  { sym:'DX-Y.NYB', name:'DXY',     dp:2 },
 ];
-
-// FRED series IDs for full yield curve
 const FRED_YIELDS = [
-  { id: 'DGS1MO', label: '1M'  },
-  { id: 'DGS3MO', label: '3M'  },
-  { id: 'DGS6MO', label: '6M'  },
-  { id: 'DGS1',   label: '1Y'  },
-  { id: 'DGS2',   label: '2Y'  },
-  { id: 'DGS3',   label: '3Y'  },
-  { id: 'DGS5',   label: '5Y'  },
-  { id: 'DGS7',   label: '7Y'  },
-  { id: 'DGS10',  label: '10Y' },
-  { id: 'DGS20',  label: '20Y' },
-  { id: 'DGS30',  label: '30Y' },
+  { id:'DGS1MO', label:'1M'  },
+  { id:'DGS3MO', label:'3M'  },
+  { id:'DGS6MO', label:'6M'  },
+  { id:'DGS1',   label:'1Y'  },
+  { id:'DGS2',   label:'2Y'  },
+  { id:'DGS3',   label:'3Y'  },
+  { id:'DGS5',   label:'5Y'  },
+  { id:'DGS7',   label:'7Y'  },
+  { id:'DGS10',  label:'10Y' },
+  { id:'DGS20',  label:'20Y' },
+  { id:'DGS30',  label:'30Y' },
 ];
-
-// Yahoo Finance yield fallback (4 points only)
 const YF_YIELDS = [
-  { sym: '^IRX', label: '3M'  },
-  { sym: '^FVX', label: '5Y'  },
-  { sym: '^TNX', label: '10Y' },
-  { sym: '^TYX', label: '30Y' },
+  { sym:'^IRX', label:'3M'  },
+  { sym:'^FVX', label:'5Y'  },
+  { sym:'^TNX', label:'10Y' },
+  { sym:'^TYX', label:'30Y' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -426,80 +306,157 @@ let cdTimer      = null;
 let cdLeft       = CFG.interval;
 let sortCol      = -1;
 let sortAsc      = true;
-let portfolio    = null;
+let portfolio    = null;       // raw parsed data
+let perfCache    = {};         // symbol -> { weekChg, monthChg, ytdChg, yearChg, ts }
 
 // ═══════════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════
-function num(n, dp = 2) {
-  if (n == null || isNaN(n)) return '--';
-  return n.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+function num(n, dp=2) {
+  if (n==null||isNaN(n)) return '--';
+  return n.toLocaleString('en-US',{minimumFractionDigits:dp,maximumFractionDigits:dp});
 }
-
-function pct(n) {
-  if (n == null || isNaN(n)) return '--';
-  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+function pctFmt(n) {
+  if (n==null||isNaN(n)) return '--';
+  return (n>=0?'+':'')+n.toFixed(2)+'%';
 }
-
 function chgHtml(change, changePct) {
-  if (change == null) return '<span class="flat">-- (--%)</span>';
-  const cls  = change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
-  const arr  = change > 0 ? '▲' : change < 0 ? '▼' : '━';
-  const sign = change >= 0 ? '+' : '';
-  const dp   = Math.abs(change) > 100 ? 0 : 2;
-  return `<span class="${cls}">${arr} ${sign}${num(change, dp)} (${pct(changePct)})</span>`;
+  if (change==null) return '<span class="flat">-- (--%)</span>';
+  const cls = change>0?'up':change<0?'down':'flat';
+  const arr = change>0?'▲':change<0?'▼':'━';
+  const dp  = Math.abs(change)>100?0:2;
+  return `<span class="${cls}">${arr} ${change>=0?'+':''}${num(Math.abs(change),dp)} (${pctFmt(changePct)})</span>`;
 }
-
+function pctCell(val) {
+  if (val==null||isNaN(val)) return '<span class="flat">--</span>';
+  const cls = val>0?'up':val<0?'down':'flat';
+  return `<span class="${cls}">${pctFmt(val)}</span>`;
+}
 function clock() {
   const n = new Date();
   document.getElementById('h-date').textContent =
-    n.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'2-digit' }).toUpperCase();
+    n.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'2-digit'}).toUpperCase();
   document.getElementById('h-time').textContent =
-    n.toLocaleTimeString('en-US', { hour12: false });
+    n.toLocaleTimeString('en-US',{hour12:false});
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DATA FETCHING
+// ROBUST FETCH — tries multiple CORS proxies
+// ═══════════════════════════════════════════════════════════════
+async function robustFetch(url, timeoutMs=9000) {
+  // Build list: working proxy first, then others, then direct
+  const proxies = [workingProxy, ...PROXIES.filter(p=>p!==workingProxy)];
+
+  for (const proxy of proxies) {
+    try {
+      const ctrl = new AbortController();
+      const tid  = setTimeout(()=>ctrl.abort(), timeoutMs);
+      const reqUrl = proxy + encodeURIComponent(url);
+      const r = await fetch(reqUrl, { signal:ctrl.signal, headers:{Accept:'application/json'} });
+      clearTimeout(tid);
+      if (r.ok) {
+        if (proxy !== workingProxy) {
+          workingProxy = proxy;
+          localStorage.setItem('workingProxy', proxy);
+          document.getElementById('sb-proxy').textContent = new URL(proxy).hostname;
+          document.getElementById('proxy-status').textContent = 'Data via: ' + new URL(proxy).hostname;
+        }
+        return r;
+      }
+    } catch { /* try next */ }
+  }
+
+  // Last resort: direct (works if server has CORS headers like FRED)
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(()=>ctrl.abort(), timeoutMs);
+    const r    = await fetch(url, { signal:ctrl.signal });
+    clearTimeout(tid);
+    if (r.ok) return r;
+  } catch {}
+
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// YAHOO FINANCE QUOTE
 // ═══════════════════════════════════════════════════════════════
 async function yfFetch(symbols) {
   const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,shortName`;
-  const proxied = CFG.proxy + encodeURIComponent(url);
+  const r = await robustFetch(url);
+  if (!r) return {};
   try {
-    const r = await fetch(proxied, { headers: { Accept: 'application/json' } });
-    if (!r.ok) throw new Error(r.status);
     const d = await r.json();
-    const results = d?.quoteResponse?.result || [];
     const map = {};
-    results.forEach(q => { map[q.symbol] = q; });
+    (d?.quoteResponse?.result||[]).forEach(q=>{ map[q.symbol]=q; });
     return map;
-  } catch (e) {
-    // try query2
-    try {
-      const url2 = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}`;
-      const r2 = await fetch(CFG.proxy + encodeURIComponent(url2));
-      const d2 = await r2.json();
-      const results2 = d2?.quoteResponse?.result || [];
-      const map2 = {};
-      results2.forEach(q => { map2[q.symbol] = q; });
-      return map2;
-    } catch { return {}; }
-  }
+  } catch { return {}; }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// FRED SERIES
+// ═══════════════════════════════════════════════════════════════
 async function fredFetch(seriesId) {
   if (!CFG.fredKey) return null;
   const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${CFG.fredKey}&limit=1&sort_order=desc&file_type=json`;
-  // Try direct first, then via proxy (needed when opening as local file)
-  for (const reqUrl of [url, CFG.proxy + encodeURIComponent(url)]) {
-    try {
-      const r = await fetch(reqUrl);
-      if (!r.ok) continue;
-      const d = await r.json();
-      const obs = d?.observations?.[0];
-      if (obs && obs.value !== '.') return { val: parseFloat(obs.value), date: obs.date };
-    } catch { /* try next */ }
-  }
-  return null;
+  const r = await robustFetch(url);
+  if (!r) return null;
+  try {
+    const d = await r.json();
+    const obs = d?.observations?.[0];
+    return (obs && obs.value!=='.') ? { val:parseFloat(obs.value), date:obs.date } : null;
+  } catch { return null; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// YAHOO FINANCE HISTORICAL — for performance columns
+// ═══════════════════════════════════════════════════════════════
+async function fetchHistorical(symbol) {
+  const cached = perfCache[symbol];
+  if (cached && (Date.now()-cached.ts) < 3600000) return cached; // 1-hr cache
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1y&interval=1d&includePrePost=false`;
+  const r = await robustFetch(url, 10000);
+  if (!r) return null;
+  try {
+    const d = await r.json();
+    const res = d?.chart?.result?.[0];
+    if (!res) return null;
+    const ts     = res.timestamp || [];
+    const closes = res.indicators?.quote?.[0]?.close || [];
+    if (!closes.length) return null;
+
+    const currentPrice = res.meta?.regularMarketPrice || closes.filter(Boolean).slice(-1)[0];
+    const now = Date.now()/1000;
+
+    function priceAt(targetTs) {
+      let best=null, bestDiff=Infinity;
+      for (let i=0;i<ts.length;i++) {
+        if (closes[i]==null) continue;
+        const diff=Math.abs(ts[i]-targetTs);
+        if (diff<bestDiff) { bestDiff=diff; best=closes[i]; }
+      }
+      return best;
+    }
+
+    function chg(cur, old) {
+      if (!old||!cur||old===0) return null;
+      return ((cur-old)/old)*100;
+    }
+
+    const year = new Date().getFullYear();
+    const ytdBase = new Date(`${year}-01-01T00:00:00Z`).getTime()/1000;
+
+    const result = {
+      weekChg:  chg(currentPrice, priceAt(now - 7*86400)),
+      monthChg: chg(currentPrice, priceAt(now - 30*86400)),
+      ytdChg:   chg(currentPrice, priceAt(ytdBase)),
+      yearChg:  chg(currentPrice, priceAt(now - 365*86400)),
+      ts: Date.now(),
+    };
+    perfCache[symbol] = result;
+    return result;
+  } catch { return null; }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -507,28 +464,24 @@ async function fredFetch(seriesId) {
 // ═══════════════════════════════════════════════════════════════
 async function updateIndices() {
   document.getElementById('idx-status').textContent = 'UPDATING...';
-  const syms = INDICES.map(i => i.sym);
-  const map = await yfFetch(syms);
-
+  const map = await yfFetch(INDICES.map(i=>i.sym));
   const grid = document.getElementById('indices-grid');
   grid.innerHTML = '';
-  INDICES.forEach(idx => {
-    const q = map[idx.sym];
-    const price = q?.regularMarketPrice;
-    const chg   = q?.regularMarketChange;
-    const chgp  = q?.regularMarketChangePercent;
-    const priceDp = price > 10000 ? 0 : price > 1000 ? 0 : 2;
-    grid.innerHTML += `
-      <div class="idx-card">
-        <div class="idx-flag-name">${idx.fl} ${idx.name}</div>
-        <div class="idx-sym">${idx.sym}</div>
-        <div class="idx-price">${price ? num(price, priceDp) : '---'}</div>
-        <div class="idx-chg">${chgHtml(chg, chgp)}</div>
-      </div>`;
+  INDICES.forEach(idx=>{
+    const q=map[idx.sym];
+    const price=q?.regularMarketPrice;
+    const chg=q?.regularMarketChange;
+    const chgp=q?.regularMarketChangePercent;
+    const dp=price>10000?0:price>1000?0:2;
+    grid.innerHTML+=`<div class="idx-card">
+      <div class="idx-name">${idx.fl} ${idx.name}</div>
+      <div class="idx-sym">${idx.sym}</div>
+      <div class="idx-price">${price?num(price,dp):'---'}</div>
+      <div class="idx-chg">${chgHtml(chg,chgp)}</div>
+    </div>`;
   });
-
-  const el = document.getElementById('idx-status');
-  el.textContent = Object.keys(map).length ? 'LIVE ●' : 'ERROR';
+  const el=document.getElementById('idx-status');
+  el.textContent = Object.keys(map).length ? 'LIVE ●' : 'ERROR — check proxy';
   el.classList.remove('blink');
 }
 
@@ -537,28 +490,24 @@ async function updateIndices() {
 // ═══════════════════════════════════════════════════════════════
 async function updateMarket() {
   document.getElementById('mkt-status').textContent = 'UPDATING...';
-  const items = [...COMMODITIES, ...FX];
-  const syms  = items.map(i => i.sym);
-  const map   = await yfFetch(syms);
-
-  const grid = document.getElementById('market-grid');
-  grid.innerHTML = '';
-  items.forEach(item => {
-    const q    = map[item.sym];
-    const price = q?.regularMarketPrice;
-    const chg   = q?.regularMarketChange;
-    const chgp  = q?.regularMarketChangePercent;
-    const cls   = !chg ? 'flat' : chg > 0 ? 'up' : 'down';
-    grid.innerHTML += `
-      <div class="mkt-card">
-        <div class="mkt-label">${item.name}</div>
-        <div class="mkt-price ${cls}">${price ? num(price, item.dp) : '---'}</div>
-        <div class="mkt-chg ${cls}">${chgp ? pct(chgp) : '--'}</div>
-      </div>`;
+  const items=[...COMMODITIES,...FX];
+  const map=await yfFetch(items.map(i=>i.sym));
+  const grid=document.getElementById('market-grid');
+  grid.innerHTML='';
+  items.forEach(item=>{
+    const q=map[item.sym];
+    const price=q?.regularMarketPrice;
+    const chg=q?.regularMarketChange;
+    const chgp=q?.regularMarketChangePercent;
+    const cls=!chg?'flat':chg>0?'up':'down';
+    grid.innerHTML+=`<div class="mkt-card">
+      <div class="mkt-label">${item.name}</div>
+      <div class="mkt-price ${cls}">${price?num(price,item.dp):'---'}</div>
+      <div class="mkt-chg ${cls}">${chgp?pctFmt(chgp):'--'}</div>
+    </div>`;
   });
-
-  const el = document.getElementById('mkt-status');
-  el.textContent = Object.keys(map).length ? 'LIVE ●' : 'ERROR';
+  const el=document.getElementById('mkt-status');
+  el.textContent=Object.keys(map).length?'LIVE ●':'ERROR';
   el.classList.remove('blink');
 }
 
@@ -566,272 +515,284 @@ async function updateMarket() {
 // RENDER YIELD CURVE
 // ═══════════════════════════════════════════════════════════════
 async function updateYields() {
-  document.getElementById('yield-status').innerHTML = '<span class="blink">UPDATING...</span>';
-
-  let labels = [], vals = [], dataDate = '';
+  document.getElementById('yield-status').innerHTML='<span class="blink">UPDATING...</span>';
+  let labels=[],vals=[],dataDate='';
 
   if (CFG.fredKey) {
-    // Full FRED yield curve
-    const results = await Promise.all(
-      FRED_YIELDS.map(s => fredFetch(s.id).then(d => ({ s, d })))
-    );
-    results.forEach(({ s, d }) => {
-      if (d) {
-        labels.push(s.label);
-        vals.push(d.val);
-        if (!dataDate) dataDate = d.date;
-      }
-    });
+    const results=await Promise.all(FRED_YIELDS.map(s=>fredFetch(s.id).then(d=>({s,d}))));
+    results.forEach(({s,d})=>{ if(d){labels.push(s.label);vals.push(d.val);if(!dataDate)dataDate=d.date;} });
     if (!labels.length) {
-      // FRED failed, fall back to YF
-      await yfYields(labels, vals);
-      document.getElementById('sb-yields').textContent = 'YF PARTIAL (4PT)';
-      document.getElementById('yield-note').textContent = 'Add FRED key in ⚙ CONFIG for full curve';
+      await yfYields(labels,vals);
+      document.getElementById('sb-yields').textContent='YF PARTIAL (4PT)';
+      document.getElementById('yield-note').textContent='FRED key saved but returned no data. Check key in ⚙ CONFIG.';
     } else {
-      document.getElementById('sb-yields').textContent = `FRED EOD ${dataDate}`;
-      document.getElementById('yield-note').textContent = `FRED data as of ${dataDate}`;
+      document.getElementById('sb-yields').textContent=`FRED EOD ${dataDate}`;
+      document.getElementById('yield-note').textContent=`Federal Reserve data as of ${dataDate}`;
     }
   } else {
-    await yfYields(labels, vals);
-    document.getElementById('sb-yields').textContent = 'YF PARTIAL (4PT)';
-    document.getElementById('yield-note').textContent = 'Add free FRED API key in ⚙ CONFIG for full 11-point curve';
+    await yfYields(labels,vals);
+    document.getElementById('sb-yields').textContent='YF PARTIAL (4PT)';
+    document.getElementById('yield-note').textContent='Add free FRED API key in ⚙ CONFIG for full 11-point curve';
   }
 
-  // Render table
-  const tbl = document.getElementById('yield-tbl');
-  tbl.innerHTML = '';
-  labels.forEach((l, i) => {
-    tbl.innerHTML += `<div class="yield-row"><span class="y-tenor">${l}</span><span class="y-val">${vals[i] != null ? vals[i].toFixed(3) + '%' : '--'}</span></div>`;
+  const tbl=document.getElementById('yield-tbl');
+  tbl.innerHTML='';
+  labels.forEach((l,i)=>{
+    tbl.innerHTML+=`<div class="yield-row"><span class="y-tenor">${l}</span><span class="y-val">${vals[i]!=null?vals[i].toFixed(3)+'%':'--'}</span></div>`;
   });
 
-  // Determine if inverted
-  const isInverted = vals.length >= 2 && vals[0] > vals[vals.length - 1];
-  const lineColor  = isInverted ? '#ff3333' : '#00cc44';
-
+  const isInverted=vals.length>=2&&vals[0]>vals[vals.length-1];
+  const lineColor=isInverted?'#ff3333':'#00cc44';
   if (yieldChart) {
-    yieldChart.data.labels = labels;
-    yieldChart.data.datasets[0].data  = vals;
-    yieldChart.data.datasets[0].borderColor     = lineColor;
-    yieldChart.data.datasets[0].backgroundColor = lineColor + '22';
-    yieldChart.data.datasets[0].pointBackgroundColor = lineColor;
+    yieldChart.data.labels=labels;
+    yieldChart.data.datasets[0].data=vals;
+    yieldChart.data.datasets[0].borderColor=lineColor;
+    yieldChart.data.datasets[0].backgroundColor=lineColor+'22';
+    yieldChart.data.datasets[0].pointBackgroundColor=lineColor;
     yieldChart.update('none');
   }
-
-  document.getElementById('yield-status').innerHTML =
-    `<span style="color:${isInverted ? 'var(--red)' : 'var(--green)'}">
-      ${isInverted ? '⚠ INVERTED CURVE' : 'NORMAL CURVE'}
-    </span>`;
+  document.getElementById('yield-status').innerHTML=
+    `<span style="color:${isInverted?'var(--red)':'var(--green)'}">${isInverted?'⚠ INVERTED CURVE':'NORMAL CURVE'}</span>`;
 }
 
-async function yfYields(labels, vals) {
-  const map = await yfFetch(YF_YIELDS.map(y => y.sym));
-  YF_YIELDS.forEach(y => {
-    const q = map[y.sym];
-    if (q?.regularMarketPrice) {
-      labels.push(y.label);
-      vals.push(q.regularMarketPrice);
-    }
-  });
+async function yfYields(labels,vals) {
+  const map=await yfFetch(YF_YIELDS.map(y=>y.sym));
+  YF_YIELDS.forEach(y=>{ const q=map[y.sym]; if(q?.regularMarketPrice){labels.push(y.label);vals.push(q.regularMarketPrice);} });
 }
 
 // ═══════════════════════════════════════════════════════════════
 // INIT YIELD CHART
 // ═══════════════════════════════════════════════════════════════
 function initYieldChart() {
-  const ctx = document.getElementById('yield-chart').getContext('2d');
-  yieldChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        label: 'Yield %',
-        data: [],
-        borderColor: '#00cc44',
-        backgroundColor: '#00cc4422',
-        borderWidth: 2.5,
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        pointBackgroundColor: '#00cc44',
-        fill: true,
-        tension: 0.35,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: '#141414',
-          borderColor: '#303030',
-          borderWidth: 1,
-          titleColor: '#ff6600',
-          bodyColor: '#cccccc',
-          callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(3)}%` }
-        }
+  const ctx=document.getElementById('yield-chart').getContext('2d');
+  yieldChart=new Chart(ctx,{
+    type:'line',
+    data:{ labels:[], datasets:[{ label:'Yield %', data:[], borderColor:'#00cc44', backgroundColor:'#00cc4422', borderWidth:2.5, pointRadius:5, pointHoverRadius:7, pointBackgroundColor:'#00cc44', fill:true, tension:0.35 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{ backgroundColor:'#141414', borderColor:'#303030', borderWidth:1, titleColor:'#ff6600', bodyColor:'#cccccc', callbacks:{label:ctx=>` ${ctx.parsed.y.toFixed(3)}%`} }
       },
-      scales: {
-        x: {
-          grid: { color: '#1a1a1a' },
-          ticks: { color: '#555', font: { family: 'Courier New', size: 10 } }
-        },
-        y: {
-          grid: { color: '#1a1a1a' },
-          ticks: {
-            color: '#555',
-            font: { family: 'Courier New', size: 10 },
-            callback: v => v.toFixed(2) + '%'
-          }
-        }
+      scales:{
+        x:{ grid:{color:'#1a1a1a'}, ticks:{color:'#555',font:{family:'Courier New',size:10}} },
+        y:{ grid:{color:'#1a1a1a'}, ticks:{color:'#555',font:{family:'Courier New',size:10},callback:v=>v.toFixed(2)+'%'} }
       }
     }
   });
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PORTFOLIO / SCHWAB PARSER
+// SCHWAB PORTFOLIO — parse, persist, performance
 // ═══════════════════════════════════════════════════════════════
 function handleFile(evt) {
-  const file = evt.target.files[0];
+  const file=evt.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
+  const reader=new FileReader();
+  reader.onload=e=>{
     try {
-      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      parseSchwab(raw, file.name);
-    } catch (err) {
-      alert('Parse error: ' + err.message);
-    }
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      parseSchwab(raw,file.name);
+    } catch(err){ alert('Parse error: '+err.message); }
   };
   reader.readAsArrayBuffer(file);
-  evt.target.value = '';
+  evt.target.value='';
 }
 
-function parseSchwab(raw, fname) {
-  // Find header row
-  const keywords = ['symbol','description','quantity','price','market value','% of account','day change'];
-  let hdrIdx = -1, headers = [];
-
-  for (let i = 0; i < Math.min(raw.length, 25); i++) {
-    const cells = raw[i].map(c => String(c).toLowerCase().trim());
-    const hits   = cells.filter(c => keywords.some(k => c.includes(k))).length;
-    if (hits >= 2) { hdrIdx = i; headers = raw[i].map(c => String(c).trim()); break; }
-  }
-
-  if (hdrIdx === -1) {
-    // Fallback: first non-empty row
-    for (let i = 0; i < raw.length; i++) {
-      if (raw[i].some(c => c !== '')) { hdrIdx = i; headers = raw[i].map(c => String(c).trim()); break; }
+function parseSchwab(raw,fname) {
+  const keywords=['symbol','description','quantity','price','market value','% of account','day change'];
+  let hdrIdx=-1, headers=[];
+  for (let i=0;i<Math.min(raw.length,25);i++) {
+    const cells=raw[i].map(c=>String(c).toLowerCase().trim());
+    if (cells.filter(c=>keywords.some(k=>c.includes(k))).length>=2) {
+      hdrIdx=i; headers=raw[i].map(c=>String(c).trim()); break;
     }
   }
-
-  if (hdrIdx === -1) { alert('Cannot detect header row'); return; }
-
-  const rows = [];
-  for (let i = hdrIdx + 1; i < raw.length; i++) {
-    const row = raw[i];
-    if (!row || row.every(c => c === '')) continue;
-    const first = String(row[0] || '').trim();
-    if (!first) continue;
-    // Skip summary/footer lines
-    if (/^(total|account\s|cash|~)/i.test(first)) continue;
-    rows.push(row.map(c => String(c).trim()));
+  if (hdrIdx===-1) {
+    for (let i=0;i<raw.length;i++) {
+      if (raw[i].some(c=>c!=='')) { hdrIdx=i; headers=raw[i].map(c=>String(c).trim()); break; }
+    }
   }
+  if (hdrIdx===-1) { alert('Cannot detect header row'); return; }
 
+  const rows=[];
+  for (let i=hdrIdx+1;i<raw.length;i++) {
+    const row=raw[i];
+    if (!row||row.every(c=>c==='')) continue;
+    const first=String(row[0]||'').trim();
+    if (!first||/^(total|account\s|cash|~)/i.test(first)) continue;
+    rows.push(row.map(c=>String(c).trim()));
+  }
   if (!rows.length) { alert('No position data found'); return; }
 
-  portfolio = { headers, rows: rows.slice(0, 100), fname, loaded: new Date() };
+  portfolio={ headers, rows:rows.slice(0,100), fname, loaded:new Date().toISOString() };
+  savePortfolio();
   renderPortfolio();
-
-  document.getElementById('port-label').textContent =
-    `${fname.toUpperCase()}  |  ${rows.length} POSITIONS  |  ${portfolio.loaded.toLocaleDateString()}`;
-  document.getElementById('sb-pos').textContent = rows.length + ' POSITIONS';
+  fetchPerformance();
 }
 
-function renderPortfolio(sc = -1) {
+function savePortfolio() {
   if (!portfolio) return;
-  const { headers, rows } = portfolio;
+  try { localStorage.setItem('schwabPortfolio', JSON.stringify(portfolio)); } catch {}
+}
 
-  // Sort
-  let display = [...rows];
-  if (sc >= 0) {
-    display.sort((a, b) => {
-      const av = parseFloat(String(a[sc]).replace(/[$,%()]/g, ''));
-      const bv = parseFloat(String(b[sc]).replace(/[$,%()]/g, ''));
-      if (!isNaN(av) && !isNaN(bv)) return sortAsc ? av - bv : bv - av;
-      return sortAsc ? String(a[sc]).localeCompare(String(b[sc])) : String(b[sc]).localeCompare(String(a[sc]));
+function loadPortfolio() {
+  try {
+    const s=localStorage.getItem('schwabPortfolio');
+    if (s) { portfolio=JSON.parse(s); renderPortfolio(); fetchPerformance(); }
+  } catch {}
+}
+
+function clearPortfolio() {
+  portfolio=null;
+  perfCache={};
+  localStorage.removeItem('schwabPortfolio');
+  document.getElementById('port-label').textContent='NO FILE LOADED';
+  document.getElementById('port-nodatamsg').style.display='';
+  document.getElementById('port-table').style.display='none';
+  document.getElementById('port-stats').innerHTML='';
+  document.getElementById('sb-pos').textContent='--';
+  document.getElementById('btn-clear-port').style.display='none';
+}
+
+// ── FETCH WEEK/MONTH/YTD/1YR FOR ALL POSITIONS ────────────────
+const PERF_COLS = ['WEEK %','MONTH %','YTD %','1YR %'];
+
+async function fetchPerformance() {
+  if (!portfolio) return;
+  const symIdx=portfolio.headers.findIndex(h=>/^symbol$/i.test(h.trim()));
+  if (symIdx===-1) return;
+
+  const symbols=[...new Set(portfolio.rows.map(r=>r[symIdx]).filter(s=>s&&!/^--/.test(s)&&s.length<10))];
+  if (!symbols.length) return;
+
+  // Mark columns as loading
+  refreshPerfCells(symbols, symIdx, true);
+
+  // Fetch in batches of 6
+  for (let i=0;i<symbols.length;i+=6) {
+    const batch=symbols.slice(i,i+6);
+    await Promise.all(batch.map(sym=>fetchHistorical(sym)));
+    refreshPerfCells(symbols, symIdx, false);
+    if (i+6<symbols.length) await new Promise(r=>setTimeout(r,300));
+  }
+}
+
+function refreshPerfCells(symbols, symIdx, loading) {
+  if (!portfolio) return;
+  portfolio.rows.forEach((row,ri)=>{
+    const sym=row[symIdx];
+    if (!sym) return;
+    const tr=document.getElementById('port-tbody')?.children[ri];
+    if (!tr) return;
+    const perf=perfCache[sym];
+    PERF_COLS.forEach((col,ci)=>{
+      const td=tr.querySelector(`[data-perf="${ci}"]`);
+      if (!td) return;
+      if (loading) { td.innerHTML='<span class="flat blink">...</span>'; return; }
+      const vals=[perf?.weekChg,perf?.monthChg,perf?.ytdChg,perf?.yearChg];
+      td.innerHTML=pctCell(vals[ci]);
+    });
+  });
+}
+
+// ── RENDER TABLE ──────────────────────────────────────────────
+function renderPortfolio(sc=-1) {
+  if (!portfolio) return;
+  const { headers, rows, fname, loaded } = portfolio;
+
+  const loadedDate = new Date(loaded);
+  document.getElementById('port-label').textContent =
+    `${fname.toUpperCase()}  |  ${rows.length} POSITIONS  |  ${loadedDate.toLocaleDateString()}`;
+  document.getElementById('sb-pos').textContent = rows.length+' POSITIONS';
+  document.getElementById('btn-clear-port').style.display='';
+
+  let display=[...rows];
+  if (sc>=0 && sc<headers.length) {
+    display.sort((a,b)=>{
+      const av=parseFloat(String(a[sc]).replace(/[$,%()]/g,''));
+      const bv=parseFloat(String(b[sc]).replace(/[$,%()]/g,''));
+      if (!isNaN(av)&&!isNaN(bv)) return sortAsc?av-bv:bv-av;
+      return sortAsc?String(a[sc]).localeCompare(String(b[sc])):String(b[sc]).localeCompare(String(a[sc]));
     });
   }
 
-  // Header
-  document.getElementById('port-thead').innerHTML =
-    '<tr>' + headers.map((h, i) =>
-      `<th onclick="doSort(${i})">${h}${sortCol===i ? (sortAsc?' ▲':' ▼'):''}</th>`
-    ).join('') + '</tr>';
+  const allHeaders=[...headers,...PERF_COLS];
+  document.getElementById('port-thead').innerHTML=
+    '<tr>'+allHeaders.map((h,i)=>
+      `<th onclick="doSort(${i})">${h}${sortCol===i?(sortAsc?' ▲':' ▼'):''}</th>`
+    ).join('')+'</tr>';
 
-  // Body
-  const tbody = document.getElementById('port-tbody');
-  tbody.innerHTML = '';
-  display.forEach(row => {
-    const tr = document.createElement('tr');
-    row.forEach((cell, ci) => {
-      const td  = document.createElement('td');
-      const hdr = (headers[ci] || '').toLowerCase();
-      const nv  = parseFloat(String(cell).replace(/[$,%()]/g, ''));
-      if ((hdr.includes('change') || hdr.includes('gain') || hdr.includes('loss')) && !isNaN(nv) && nv !== 0) {
-        td.className = nv > 0 ? 'up' : 'down';
+  const symIdx=headers.findIndex(h=>/^symbol$/i.test(h.trim()));
+  const tbody=document.getElementById('port-tbody');
+  tbody.innerHTML='';
+  display.forEach(row=>{
+    const tr=document.createElement('tr');
+    // Original Schwab columns
+    row.forEach((cell,ci)=>{
+      const td=document.createElement('td');
+      const hdr=(headers[ci]||'').toLowerCase();
+      const nv=parseFloat(String(cell).replace(/[$,%()]/g,''));
+      if ((hdr.includes('change')||hdr.includes('gain')||hdr.includes('loss'))&&!isNaN(nv)&&nv!==0) {
+        td.className=nv>0?'up':'down';
       }
-      td.textContent = cell;
+      td.textContent=cell;
+      tr.appendChild(td);
+    });
+    // Performance columns
+    const sym=symIdx>=0?row[symIdx]:null;
+    const perf=sym?perfCache[sym]:null;
+    const perfVals=[perf?.weekChg,perf?.monthChg,perf?.ytdChg,perf?.yearChg];
+    PERF_COLS.forEach((col,ci)=>{
+      const td=document.createElement('td');
+      td.setAttribute('data-perf',ci);
+      td.innerHTML = perf ? pctCell(perfVals[ci]) : '<span class="flat blink">...</span>';
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
   });
 
   // Stats
-  const mvIdx  = headers.findIndex(h => /market.?value/i.test(h));
-  const chgIdx = headers.findIndex(h => /day.?change.?\$/i.test(h));
-  let totalMV = 0, totalChg = 0;
-  rows.forEach(r => {
-    if (mvIdx  >= 0) { const v = parseFloat(String(r[mvIdx]).replace(/[$,()]/g,''));  if (!isNaN(v)) totalMV  += v; }
-    if (chgIdx >= 0) { const v = parseFloat(String(r[chgIdx]).replace(/[$,()]/g,'')); if (!isNaN(v)) totalChg += v; }
+  const mvIdx  =headers.findIndex(h=>/market.?value/i.test(h));
+  const chgIdx =headers.findIndex(h=>/day.?change.?\$/i.test(h));
+  let totalMV=0,totalChg=0;
+  rows.forEach(r=>{
+    if (mvIdx>=0) { const v=parseFloat(String(r[mvIdx]).replace(/[$,()]/g,'')); if(!isNaN(v)) totalMV+=v; }
+    if (chgIdx>=0){ const v=parseFloat(String(r[chgIdx]).replace(/[$,()]/g,'')); if(!isNaN(v)) totalChg+=v; }
   });
+  let s=`<div>POSITIONS: <span class="sv">${rows.length}</span></div>`;
+  if (totalMV)  s+=`<div>TOTAL MV: <span class="sv">$${totalMV.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>`;
+  if (totalChg) s+=`<div>DAY P&L: <span class="sv ${totalChg>=0?'up':'down'}">${totalChg>=0?'+':''}$${Math.abs(totalChg).toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>`;
+  document.getElementById('port-stats').innerHTML=s;
 
-  let s = `<div>POSITIONS: <span class="sv">${rows.length}</span></div>`;
-  if (totalMV)  s += `<div>TOTAL MV: <span class="sv">$${totalMV.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>`;
-  if (totalChg) s += `<div>DAY P&L: <span class="sv ${totalChg>=0?'up':'down'}">${totalChg>=0?'+':''}$${Math.abs(totalChg).toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>`;
-  document.getElementById('port-stats').innerHTML = s;
-
-  document.getElementById('port-nodatamsg').style.display = 'none';
-  document.getElementById('port-table').style.display     = 'table';
+  document.getElementById('port-nodatamsg').style.display='none';
+  document.getElementById('port-table').style.display='table';
 }
 
 function doSort(ci) {
-  if (sortCol === ci) sortAsc = !sortAsc; else { sortCol = ci; sortAsc = true; }
-  renderPortfolio(ci);
+  if (sortCol===ci) sortAsc=!sortAsc; else { sortCol=ci; sortAsc=true; }
+  renderPortfolio(ci<portfolio.headers.length?ci:-1);
 }
 
 // ═══════════════════════════════════════════════════════════════
 // SETTINGS
 // ═══════════════════════════════════════════════════════════════
 function toggleSettings() {
-  const d = document.getElementById('settings-drawer');
-  const open = d.classList.toggle('open');
+  const d=document.getElementById('settings-drawer');
+  const open=d.classList.toggle('open');
   if (open) {
-    document.getElementById('s-fred').value     = CFG.fredKey;
-    document.getElementById('s-proxy').value    = CFG.proxy;
-    document.getElementById('s-interval').value = CFG.interval;
+    document.getElementById('s-fred').value    =CFG.fredKey;
+    document.getElementById('s-interval').value=CFG.interval;
+    document.getElementById('proxy-status').textContent='Active proxy: '+new URL(workingProxy).hostname;
   }
 }
-
 function saveSettings() {
-  CFG.fredKey  = document.getElementById('s-fred').value.trim();
-  CFG.proxy    = document.getElementById('s-proxy').value.trim() || 'https://corsproxy.io/?';
-  CFG.interval = parseInt(document.getElementById('s-interval').value) || 60;
-  localStorage.setItem('fredKey',  CFG.fredKey);
-  localStorage.setItem('proxy',    CFG.proxy);
-  localStorage.setItem('interval', CFG.interval);
+  CFG.fredKey =document.getElementById('s-fred').value.trim();
+  CFG.interval=parseInt(document.getElementById('s-interval').value)||60;
+  localStorage.setItem('fredKey', CFG.fredKey);
+  localStorage.setItem('interval',CFG.interval);
   toggleSettings();
   restartTimers();
   fetchAllData();
@@ -843,45 +804,46 @@ function saveSettings() {
 function restartTimers() {
   clearInterval(refreshTimer);
   clearInterval(cdTimer);
-  cdLeft = CFG.interval;
-
-  cdTimer = setInterval(() => {
+  cdLeft=CFG.interval;
+  cdTimer=setInterval(()=>{
     cdLeft--;
-    document.getElementById('h-next').textContent = cdLeft + 's';
-    if (cdLeft <= 0) cdLeft = CFG.interval;
-  }, 1000);
-
-  refreshTimer = setInterval(fetchAllData, CFG.interval * 1000);
+    document.getElementById('h-next').textContent=cdLeft+'s';
+    if(cdLeft<=0) cdLeft=CFG.interval;
+  },1000);
+  refreshTimer=setInterval(fetchAllData,CFG.interval*1000);
 }
 
 async function fetchAllData() {
-  document.getElementById('h-updated').textContent = '...';
-  await Promise.all([ updateIndices(), updateMarket(), updateYields() ]);
-  document.getElementById('h-updated').textContent =
-    new Date().toLocaleTimeString('en-US', { hour12: false });
-  cdLeft = CFG.interval;
+  document.getElementById('h-updated').textContent='...';
+  await Promise.all([updateIndices(),updateMarket(),updateYields()]);
+  document.getElementById('h-updated').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});
+  cdLeft=CFG.interval;
 }
 
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
-  // Clock
+document.addEventListener('DOMContentLoaded',()=>{
   clock();
-  setInterval(clock, 1000);
+  setInterval(clock,1000);
 
-  // Skeleton indices (prevents layout shift)
-  const g = document.getElementById('indices-grid');
-  INDICES.forEach(i => {
-    g.innerHTML += `<div class="idx-card">
-      <div class="idx-flag-name">${i.fl} ${i.name}</div>
-      <div class="idx-sym">${i.sym}</div>
-      <div class="idx-price blink">...</div>
-      <div class="idx-chg flat">--</div>
-    </div>`;
+  // Skeleton
+  const g=document.getElementById('indices-grid');
+  INDICES.forEach(i=>{
+    g.innerHTML+=`<div class="idx-card"><div class="idx-name">${i.fl} ${i.name}</div><div class="idx-sym">${i.sym}</div><div class="idx-price blink">...</div><div class="idx-chg flat">--</div></div>`;
   });
 
+  document.getElementById('sb-proxy').textContent=new URL(workingProxy).hostname;
   initYieldChart();
+
+  // Pre-load saved FRED key into CONFIG field hint
+  if (CFG.fredKey) {
+    document.getElementById('sb-yields').textContent='FRED (saved)';
+  }
+
+  // Restore saved portfolio
+  loadPortfolio();
+
   fetchAllData();
   restartTimers();
 });
