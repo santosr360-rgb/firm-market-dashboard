@@ -593,35 +593,66 @@ function clearPortfolio() {
 }
 
 // ── Fetch performance for all portfolio symbols ───────────────
+function findSymbolCol(headers) {
+  // Try exact match first, then partial match
+  let i = headers.findIndex(h => /^symbol$/i.test(h.trim()));
+  if (i === -1) i = headers.findIndex(h => /symbol/i.test(h));
+  if (i === -1) i = headers.findIndex(h => /ticker/i.test(h));
+  return i;
+}
+
 async function loadPerformance() {
   if (!portfolio) return;
-  // Wait for server to be ready if needed
-  if (!serverOk) {
-    await checkServer();
-    if (!serverOk) return;
-  }
-  const symIdx = portfolio.headers.findIndex(h=>/^symbol$/i.test(h.trim()));
-  if (symIdx===-1) return;
-  const symbols = [...new Set(
-    portfolio.rows.map(r=>r[symIdx]).filter(s=>s&&s.length<10&&!/--|^--/.test(s))
-  )];
-  if (!symbols.length) return;
+  if (!serverOk) { await checkServer(); if (!serverOk) return; }
 
-  // Send ALL symbols in one request — server does a single batch download
+  const symIdx = findSymbolCol(portfolio.headers);
+  if (symIdx === -1) {
+    console.warn('No Symbol column found. Headers:', portfolio.headers);
+    setPerfStatus(`No Symbol column found. Headers: ${portfolio.headers.slice(0,5).join(', ')}...`);
+    return;
+  }
+
+  const symbols = [...new Set(
+    portfolio.rows.map(r => r[symIdx]).filter(s => s && !/^--|^$/.test(s.trim()))
+  )];
+
+  if (!symbols.length) {
+    setPerfStatus('No symbols found in Symbol column');
+    return;
+  }
+
+  setPerfStatus(`Loading performance for ${symbols.length} symbols...`);
+  console.log('Fetching history for:', symbols.slice(0,5), '...');
+
   const data = await apiHistory(symbols);
+  const count = Object.keys(data).length;
+
+  if (!count) {
+    setPerfStatus(`Server returned no history data. Check console.`);
+    console.error('apiHistory returned empty. Symbols sent:', symbols.slice(0,5));
+    return;
+  }
+
   updatePerfCells(data, symIdx);
+  setPerfStatus(`Performance loaded for ${count}/${symbols.length} symbols`);
+}
+
+function setPerfStatus(msg) {
+  const el = document.getElementById('port-label');
+  if (el && portfolio) {
+    const base = `${portfolio.fname.toUpperCase()} | ${portfolio.rows.length} POSITIONS | ${new Date(portfolio.loaded).toLocaleDateString()}`;
+    el.textContent = base + ' | ' + msg;
+  }
 }
 
 function updatePerfCells(perfData, symIdx) {
   if (!portfolio) return;
-  portfolio.rows.forEach((row, ri)=>{
-    const sym = row[symIdx];
-    const p   = perfData[sym];
-    if (!p) return;
-    const tr = document.getElementById('port-tbody')?.children[ri];
+  // Match by data-sym attribute (not row index) so sorting doesn't break it
+  Object.entries(perfData).forEach(([sym, p]) => {
+    const tr = document.querySelector(`#port-tbody tr[data-sym="${CSS.escape(sym)}"]`);
     if (!tr) return;
     const vals = [p.weekChg, p.monthChg, p.ytdChg, p.yearChg];
-    PERF_COLS.forEach((_,ci)=>{
+    PERF_COLS.forEach((_, ci) => {
       const td = tr.querySelector(`[data-perf="${ci}"]`);
       if (td) td.innerHTML = pctCell(vals[ci]);
     });
@@ -652,11 +683,13 @@ function renderPortfolio(sc=-1) {
   document.getElementById('port-thead').innerHTML =
     '<tr>'+allHdrs.map((h,i)=>`<th onclick="doSort(${i})">${h}${sortCol===i?(sortAsc?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
 
-  const symIdx = headers.findIndex(h=>/^symbol$/i.test(h.trim()));
+  const symIdx = findSymbolCol(headers);
   const tbody  = document.getElementById('port-tbody');
   tbody.innerHTML = '';
   display.forEach(row=>{
-    const tr = document.createElement('tr');
+    const tr  = document.createElement('tr');
+    const sym = symIdx >= 0 ? row[symIdx] : '';
+    if (sym) tr.setAttribute('data-sym', sym);
     // Original columns
     row.forEach((cell,ci)=>{
       const td  = document.createElement('td');
