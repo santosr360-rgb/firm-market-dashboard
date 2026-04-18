@@ -81,6 +81,20 @@
     .y-val      { color:var(--amber); font-size:10px; font-weight:bold; }
     .yield-note { font-size:8px; color:var(--dim); margin-top:4px; text-align:center; line-height:1.5; }
 
+    /* TOP MOVERS */
+    .movers-layout  { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .movers-col     { background:var(--bg3); border:1px solid var(--border); }
+    .movers-col-hdr { padding:4px 8px; font-size:9px; font-weight:bold; letter-spacing:2px; background:var(--bg4); border-bottom:1px solid var(--border); }
+    .movers-col-hdr.up   { color:var(--green); }
+    .movers-col-hdr.down { color:var(--red); }
+    .movers-tbl     { width:100%; border-collapse:collapse; font-size:10px; }
+    .movers-tbl td  { padding:4px 8px; border-bottom:1px solid #1a1a1a; white-space:nowrap; }
+    .movers-tbl tr:last-child td { border-bottom:none; }
+    .movers-sym     { color:var(--amber); font-weight:bold; text-align:left; width:70px; }
+    .movers-desc    { color:var(--text); text-align:left; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
+    .movers-pct     { text-align:right; font-weight:bold; width:80px; }
+    .movers-dollar  { text-align:right; color:var(--dim); width:110px; }
+
     /* PORTFOLIO */
     .port-controls { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
     #file-input  { display:none; }
@@ -179,6 +193,28 @@
           <div class="yield-tbl" id="yield-tbl"></div>
           <div class="yield-note" id="yield-note"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="movers-panel">
+    <div class="panel-hdr">
+      <span class="panel-title">TOP MOVERS &mdash; DAY</span>
+      <span class="panel-sub" id="movers-sub">FROM LOADED PORTFOLIO</span>
+    </div>
+    <div class="panel-body">
+      <div class="movers-layout" id="movers-layout">
+        <div class="movers-col">
+          <div class="movers-col-hdr up">&#9650; TOP 5 GAINERS</div>
+          <table class="movers-tbl"><tbody id="movers-up"></tbody></table>
+        </div>
+        <div class="movers-col">
+          <div class="movers-col-hdr down">&#9660; TOP 5 LOSERS</div>
+          <table class="movers-tbl"><tbody id="movers-down"></tbody></table>
+        </div>
+      </div>
+      <div class="no-data-msg" id="movers-nodata">
+        <div>UPLOAD PORTFOLIO TO SEE TOP MOVERS</div>
       </div>
     </div>
   </div>
@@ -604,6 +640,7 @@ function clearPortfolio() {
   document.getElementById('port-stats').innerHTML = '';
   document.getElementById('sb-pos').textContent = '--';
   document.getElementById('btn-clear').style.display = 'none';
+  renderTopMovers();
 }
 
 // ── Fetch performance for all portfolio symbols ───────────────
@@ -831,11 +868,77 @@ function renderPortfolio(sc=-1) {
 
   // Re-apply cached perf data so sorting doesn't wipe the numbers
   if (lastPerfData) updatePerfCells(lastPerfData, findSymbolCol(headers));
+
+  renderTopMovers();
 }
 
 function doSort(vi) {
   if (sortCol===vi) sortAsc=!sortAsc; else { sortCol=vi; sortAsc=true; }
   renderPortfolio(colMap[vi] ?? -1);
+}
+
+// ── Top movers on the day (from Schwab day-change column) ─────
+function renderTopMovers() {
+  const tbUp    = document.getElementById('movers-up');
+  const tbDown  = document.getElementById('movers-down');
+  const layout  = document.getElementById('movers-layout');
+  const nodata  = document.getElementById('movers-nodata');
+  const sub     = document.getElementById('movers-sub');
+
+  const showEmpty = (msg) => {
+    tbUp.innerHTML = ''; tbDown.innerHTML = '';
+    layout.style.display = 'none';
+    nodata.style.display = '';
+    nodata.firstElementChild.textContent = msg;
+    sub.textContent = 'FROM LOADED PORTFOLIO';
+  };
+
+  if (!portfolio) return showEmpty('UPLOAD PORTFOLIO TO SEE TOP MOVERS');
+
+  const { headers, rows } = portfolio;
+  const symIdx    = findSymbolCol(headers);
+  const descIdx   = headers.findIndex(h => /description/i.test(h));
+  const dayPctIdx = headers.findIndex(h => /day.?change.*%/i.test(h));
+  const dayDolIdx = headers.findIndex(h => /day.?change.?\$/i.test(h));
+
+  if (symIdx < 0 || dayPctIdx < 0)
+    return showEmpty('DAY-CHANGE COLUMN NOT FOUND IN EXPORT');
+
+  const parsed = rows.map(r => {
+    const pctRaw = parseFloat(String(r[dayPctIdx]).replace(/[%,\s]/g,''));
+    if (isNaN(pctRaw)) return null;
+    const dol = dayDolIdx >= 0 ? parseFloat(String(r[dayDolIdx]).replace(/[$,()\s]/g,'')) : NaN;
+    return {
+      sym:    r[symIdx],
+      desc:   descIdx >= 0 ? r[descIdx] : '',
+      pct:    pctRaw * 100,
+      dollar: isNaN(dol) ? null : dol,
+    };
+  }).filter(x => x && !isNaN(x.pct));
+
+  if (!parsed.length) return showEmpty('NO VALID DAY-CHANGE VALUES');
+
+  const gainers = [...parsed].sort((a,b) => b.pct - a.pct).filter(x => x.pct > 0).slice(0, 5);
+  const losers  = [...parsed].sort((a,b) => a.pct - b.pct).filter(x => x.pct < 0).slice(0, 5);
+
+  const fmtDol = (d) => d == null ? '--' :
+    (d >= 0 ? '+' : '-') + '$' + Math.abs(d).toLocaleString('en-US',{maximumFractionDigits:0});
+  const rowHtml = (m) => `
+    <tr>
+      <td class="movers-sym">${m.sym}</td>
+      <td class="movers-desc" title="${(m.desc||'').replace(/"/g,'&quot;')}">${m.desc || ''}</td>
+      <td class="movers-pct ${m.pct>0?'up':'down'}">${m.pct>=0?'+':''}${m.pct.toFixed(2)}%</td>
+      <td class="movers-dollar ${m.dollar!=null?(m.dollar>0?'up':m.dollar<0?'down':'flat'):''}">${fmtDol(m.dollar)}</td>
+    </tr>`;
+
+  tbUp.innerHTML   = gainers.length ? gainers.map(rowHtml).join('') :
+    '<tr><td colspan="4" class="flat" style="text-align:center;padding:12px">NO GAINERS TODAY</td></tr>';
+  tbDown.innerHTML = losers.length  ? losers.map(rowHtml).join('')  :
+    '<tr><td colspan="4" class="flat" style="text-align:center;padding:12px">NO LOSERS TODAY</td></tr>';
+
+  layout.style.display = '';
+  nodata.style.display = 'none';
+  sub.textContent = `${parsed.length} POSITIONS WITH DAY-CHANGE DATA`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -887,6 +990,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   buildIndicesGrid();
   buildMarketGrid();
   initYieldChart();
+  renderTopMovers();
   loadSavedPortfolio();
   fetchAllData();
   restartTimers();
