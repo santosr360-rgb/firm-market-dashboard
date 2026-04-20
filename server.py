@@ -60,8 +60,10 @@ def _quote_one(sym):
 
 def get_quotes(symbols):
     """Return {sym: {price, change, changePct}} for a list of symbols."""
+    # 20s TTL so client polling at 60s+ intervals always gets fresh ticks;
+    # still shields yfinance from a burst of duplicate requests within a tick.
     key = 'q:' + ','.join(sorted(symbols))
-    cached = cache_get(key, 60)
+    cached = cache_get(key, 20)
     if cached is not None:
         return cached
 

@@ -334,6 +334,7 @@ let sortCol      = -1;
 let sortAsc      = true;
 let colMap       = [];   // maps visual column index → data column index (-1 = not sortable)
 let lastPerfData = null; // cache of most recent performance fetch — re-applied after every sort
+let lastQuotes   = null; // cache of most recent live quote fetch — re-applied after every sort
 let portfolio    = null;
 let serverOk     = false;
 
@@ -653,18 +654,20 @@ function parseSchwab(raw, fname) {
   localStorage.setItem('schwabPortfolio', JSON.stringify(portfolio));
   renderPortfolio();
   loadPerformance();
+  updatePortfolioLive();
 }
 
 function loadSavedPortfolio() {
   try {
     const s = localStorage.getItem('schwabPortfolio');
-    if (s) { portfolio = JSON.parse(s); renderPortfolio(); loadPerformance(); }
+    if (s) { portfolio = JSON.parse(s); renderPortfolio(); loadPerformance(); updatePortfolioLive(); }
   } catch {}
 }
 
 function clearPortfolio() {
   portfolio = null;
   lastPerfData = null;
+  lastQuotes = null;
   localStorage.removeItem('schwabPortfolio');
   document.getElementById('port-label').textContent = 'NO FILE LOADED';
   document.getElementById('port-nodatamsg').style.display = '';
@@ -743,6 +746,99 @@ function updatePerfCells(perfData, symIdx) {
   });
 }
 
+// ── Live quotes: fetch current prices for every portfolio symbol ──
+// Every refresh tick we pull fresh quotes and re-paint the DAY%, price,
+// market value, day P&L and gain/loss cells in place — so the section
+// doesn't stay frozen on the snapshot values Schwab exported.
+async function updatePortfolioLive() {
+  if (!portfolio || !serverOk) return;
+  const symIdx = findSymbolCol(portfolio.headers);
+  if (symIdx < 0) return;
+  const symbols = [...new Set(
+    portfolio.rows.map(r => r[symIdx]).filter(s => s && !/^--|^$/.test(String(s).trim()))
+  )];
+  if (!symbols.length) return;
+  const data = await apiQuotes(symbols);
+  if (!Object.keys(data).length) return;
+  lastQuotes = data;
+  applyLiveQuotes();
+  renderTopMovers();
+}
+
+function fmtMoney(n, dp=2) {
+  return '$' + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:dp, maximumFractionDigits:dp});
+}
+
+function applyLiveQuotes() {
+  if (!lastQuotes || !portfolio) return;
+  const { headers, rows } = portfolio;
+  const symIdx       = findSymbolCol(headers);
+  if (symIdx < 0) return;
+  const qtyIdx       = headers.findIndex(h => /^(quantity|qty|shares)$/i.test(String(h).trim()));
+  const costBasisIdx = headers.findIndex(h => /cost.?basis/i.test(h));
+  const mvIdx2       = headers.findIndex(h => /market.?value/i.test(h));
+  const dayDolIdx2   = headers.findIndex(h => /day.?change.?\$/i.test(h));
+
+  let totalMV = 0, totalChg = 0;
+
+  rows.forEach(row => {
+    const sym = row[symIdx];
+    if (!sym) return;
+    const q  = lastQuotes[sym];
+    const tr = document.querySelector(`#port-tbody tr[data-sym="${CSS.escape(sym)}"]`);
+
+    const qty       = qtyIdx >= 0       ? parseFloat(String(row[qtyIdx]).replace(/[,\s]/g, '')) : NaN;
+    const costBasis = costBasisIdx >= 0 ? parseDollarCell(row[costBasisIdx]) : NaN;
+    let   mv        = mvIdx2 >= 0       ? parseDollarCell(row[mvIdx2])       : NaN;
+    let   dayDol    = dayDolIdx2 >= 0   ? parseDollarCell(row[dayDolIdx2])   : NaN;
+
+    if (q) {
+      if (!isNaN(qty)) {
+        mv     = q.price * qty;
+        dayDol = q.change * qty;
+      }
+      if (tr) {
+        const setCell = (sel, text, cls) => {
+          const el = tr.querySelector(sel);
+          if (!el) return;
+          el.textContent = text;
+          if (cls !== undefined) el.className = cls;
+        };
+
+        setCell('[data-live="price"]', fmtMoney(q.price, 2), '');
+        if (!isNaN(mv))     setCell('[data-live="mv"]',     fmtMoney(mv, 2), '');
+        if (!isNaN(dayDol)) {
+          const cls = dayDol > 0 ? 'up' : dayDol < 0 ? 'down' : 'flat';
+          setCell('[data-live="daydol"]', (dayDol>=0?'+':'-') + fmtMoney(dayDol, 2), cls);
+        }
+
+        const pvCls = q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
+        const dayEl = tr.querySelector('[data-live="daypct"]');
+        if (dayEl) dayEl.innerHTML = pctCell(q.changePct);
+        setCell('[data-live="daypct-raw"]', (q.changePct>=0?'+':'') + q.changePct.toFixed(2) + '%', pvCls);
+
+        if (!isNaN(costBasis) && !isNaN(mv)) {
+          const gl = mv - costBasis;
+          const glCls = gl > 0 ? 'up' : gl < 0 ? 'down' : 'flat';
+          setCell('[data-live="gldol"]', (gl>=0?'+':'-') + fmtMoney(gl, 2), glCls);
+          if (costBasis !== 0) {
+            const glp = gl / Math.abs(costBasis) * 100;
+            setCell('[data-live="glpct"]', (glp>=0?'+':'') + glp.toFixed(2) + '%', glCls);
+          }
+        }
+      }
+    }
+
+    if (!isNaN(mv))     totalMV  += mv;
+    if (!isNaN(dayDol)) totalChg += dayDol;
+  });
+
+  let s = `<div>POSITIONS: <span class="sv">${rows.length}</span></div>`;
+  if (totalMV)  s += `<div>TOTAL MV: <span class="sv">$${totalMV.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>`;
+  if (totalChg) s += `<div>DAY P&L: <span class="sv ${totalChg>=0?'up':'down'}">${totalChg>=0?'+':''}$${Math.abs(totalChg).toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>`;
+  document.getElementById('port-stats').innerHTML = s;
+}
+
 // ── Render table ──────────────────────────────────────────────
 function renderPortfolio(sc=-1) {
   if (!portfolio) return;
@@ -755,6 +851,11 @@ function renderPortfolio(sc=-1) {
 
   const symIdx    = findSymbolCol(headers);
   const dayPctIdx = headers.findIndex(h => /day.?change.*%/i.test(h));
+  const priceIdx  = headers.findIndex(h => /^(?:last\s*)?price$/i.test(String(h).trim()));
+  const mvIdxR    = headers.findIndex(h => /market.?value/i.test(h));
+  const dayDolIdx = headers.findIndex(h => /day.?change.?\$/i.test(h));
+  const glDolIdx  = headers.findIndex(h => /gain.?loss.?\$/i.test(h));
+  const glPctIdx  = headers.findIndex(h => /gain.?loss.*%/i.test(h));
   // All columns except the symbol column (it goes first)
   const otherIdxs = headers.map((_,i) => i).filter(i => i !== symIdx);
 
@@ -822,6 +923,7 @@ function renderPortfolio(sc=-1) {
       // parsePctCell normalises both to the same percent scale and handles
       // parenthesised negatives like "(1.59%)".
       const tdDay = document.createElement('td');
+      tdDay.setAttribute('data-live', 'daypct');
       if (dayPctIdx >= 0) {
         const pv = parsePctCell(row[dayPctIdx]);
         tdDay.innerHTML = isNaN(pv) ? '<span class="flat">—</span>' : pctCell(pv);
@@ -843,6 +945,13 @@ function renderPortfolio(sc=-1) {
         const td = document.createElement('td');
         const hdr = (headers[ci]||'').toLowerCase();
         const cell = row[ci];
+        // Tag cells that should refresh live on every quote poll
+        if      (ci === dayPctIdx) td.setAttribute('data-live', 'daypct-raw');
+        else if (ci === priceIdx)  td.setAttribute('data-live', 'price');
+        else if (ci === mvIdxR)    td.setAttribute('data-live', 'mv');
+        else if (ci === dayDolIdx) td.setAttribute('data-live', 'daydol');
+        else if (ci === glDolIdx)  td.setAttribute('data-live', 'gldol');
+        else if (ci === glPctIdx)  td.setAttribute('data-live', 'glpct');
         // Format Day Change % column as a real percentage
         if (ci === dayPctIdx) {
           const pv = parsePctCell(cell);
@@ -897,6 +1006,8 @@ function renderPortfolio(sc=-1) {
 
   // Re-apply cached perf data so sorting doesn't wipe the numbers
   if (lastPerfData) updatePerfCells(lastPerfData, findSymbolCol(headers));
+  // Re-apply cached live quotes for the same reason
+  if (lastQuotes) applyLiveQuotes();
 
   renderTopMovers();
 }
@@ -929,16 +1040,31 @@ function renderTopMovers() {
   const descIdx   = headers.findIndex(h => /description/i.test(h));
   const dayPctIdx = headers.findIndex(h => /day.?change.*%/i.test(h));
   const dayDolIdx = headers.findIndex(h => /day.?change.?\$/i.test(h));
+  const qtyIdx    = headers.findIndex(h => /^(quantity|qty|shares)$/i.test(String(h).trim()));
 
-  if (symIdx < 0 || dayPctIdx < 0)
+  if (symIdx < 0) return showEmpty('SYMBOL COLUMN NOT FOUND IN EXPORT');
+  if (dayPctIdx < 0 && !lastQuotes)
     return showEmpty('DAY-CHANGE COLUMN NOT FOUND IN EXPORT');
 
+  // Prefer live quotes (updated every refresh tick) over the static
+  // Schwab-exported day-change snapshot. Falls back to the Schwab columns
+  // for symbols the server couldn't fetch.
   const parsed = rows.map(r => {
-    const pct = parsePctCell(r[dayPctIdx]);
+    const sym = r[symIdx];
+    const q   = (lastQuotes || {})[sym];
+    let pct, dol;
+    if (q) {
+      pct = q.changePct;
+      const qty = qtyIdx >= 0 ? parseFloat(String(r[qtyIdx]).replace(/[,\s]/g, '')) : NaN;
+      dol = !isNaN(qty) ? q.change * qty
+          : (dayDolIdx >= 0 ? parseDollarCell(r[dayDolIdx]) : NaN);
+    } else {
+      pct = dayPctIdx >= 0 ? parsePctCell(r[dayPctIdx]) : NaN;
+      dol = dayDolIdx >= 0 ? parseDollarCell(r[dayDolIdx]) : NaN;
+    }
     if (isNaN(pct)) return null;
-    const dol = dayDolIdx >= 0 ? parseDollarCell(r[dayDolIdx]) : NaN;
     return {
-      sym:    r[symIdx],
+      sym,
       desc:   descIdx >= 0 ? r[descIdx] : '',
       pct,
       dollar: isNaN(dol) ? null : dol,
@@ -1005,7 +1131,12 @@ async function fetchAllData() {
   document.getElementById('h-updated').textContent = '...';
   await checkServer();
   if (serverOk) {
-    await Promise.all([updateIndices(), updateMarket(), updateYields()]);
+    const jobs = [updateIndices(), updateMarket(), updateYields()];
+    if (portfolio) {
+      jobs.push(updatePortfolioLive());
+      jobs.push(loadPerformance());
+    }
+    await Promise.all(jobs);
   }
   document.getElementById('h-updated').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
   cdLeft = CFG.interval;
