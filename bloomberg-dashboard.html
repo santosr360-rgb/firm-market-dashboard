@@ -365,6 +365,38 @@ function clock() {
   document.getElementById('h-time').textContent=n.toLocaleTimeString('en-US',{hour12:false});
 }
 
+// Parse a Schwab-exported percent cell. Handles:
+//   "1.59%"     → 1.59   (already in percent form)
+//   "0.0159"    → 1.59   (decimal fraction → × 100)
+//   "(1.59%)"   → -1.59  (parenthesised negative)
+//   "-1.59%"    → -1.59
+//   "--" / "" / garbage → NaN
+function parsePctCell(cell) {
+  if (cell == null) return NaN;
+  const s = String(cell).trim();
+  if (!s || s === '--') return NaN;
+  const neg = /^\(.*\)$/.test(s);
+  const hasPctSign = s.includes('%');
+  const cleaned = s.replace(/[%,\s$()]/g, '');
+  let n = parseFloat(cleaned);
+  if (isNaN(n)) return NaN;
+  if (neg) n = -Math.abs(n);
+  if (!hasPctSign) n = n * 100;  // decimal fraction, promote to percent
+  return n;
+}
+
+// Parse a Schwab-exported dollar cell. Handles "(123.45)" as negative.
+function parseDollarCell(cell) {
+  if (cell == null) return NaN;
+  const s = String(cell).trim();
+  if (!s || s === '--') return NaN;
+  const neg = /^\(.*\)$/.test(s);
+  let n = parseFloat(s.replace(/[$,\s()]/g, ''));
+  if (isNaN(n)) return NaN;
+  if (neg) n = -Math.abs(n);
+  return n;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // API CALLS
 // ═══════════════════════════════════════════════════════════════════
@@ -786,15 +818,13 @@ function renderPortfolio(sc=-1) {
       tdSym.textContent = row[symIdx];
       tr.appendChild(tdSym);
 
-      // DAY % cell — Schwab exports day change % as a decimal (e.g. -0.0102 = -1.02%)
+      // DAY % cell — Schwab may export either "1.59%" or a 0.0159 decimal;
+      // parsePctCell normalises both to the same percent scale and handles
+      // parenthesised negatives like "(1.59%)".
       const tdDay = document.createElement('td');
       if (dayPctIdx >= 0) {
-        const rawVal = parseFloat(String(row[dayPctIdx]).replace(/[%,\s]/g,''));
-        if (!isNaN(rawVal)) {
-          tdDay.innerHTML = pctCell(rawVal * 100);
-        } else {
-          tdDay.innerHTML = '<span class="flat">—</span>';
-        }
+        const pv = parsePctCell(row[dayPctIdx]);
+        tdDay.innerHTML = isNaN(pv) ? '<span class="flat">—</span>' : pctCell(pv);
       } else {
         tdDay.innerHTML = '<span class="flat">—</span>';
       }
@@ -815,14 +845,13 @@ function renderPortfolio(sc=-1) {
         const cell = row[ci];
         // Format Day Change % column as a real percentage
         if (ci === dayPctIdx) {
-          const nv = parseFloat(String(cell).replace(/[%,\s]/g,''));
-          if (!isNaN(nv)) {
-            const pv = nv * 100;
+          const pv = parsePctCell(cell);
+          if (!isNaN(pv)) {
             td.textContent = (pv >= 0 ? '+' : '') + pv.toFixed(2) + '%';
             td.className = pv > 0 ? 'up' : pv < 0 ? 'down' : 'flat';
           } else { td.textContent = cell; }
         } else {
-          const nv = parseFloat(String(cell).replace(/[$,%()]/g,''));
+          const nv = parseDollarCell(cell);
           if ((hdr.includes('change')||hdr.includes('gain')||hdr.includes('loss'))&&!isNaN(nv)&&nv!==0)
             td.className = nv > 0 ? 'up' : 'down';
           td.textContent = cell;
@@ -834,7 +863,7 @@ function renderPortfolio(sc=-1) {
       row.forEach((cell,ci)=>{
         const td = document.createElement('td');
         const hdr = (headers[ci]||'').toLowerCase();
-        const nv = parseFloat(String(cell).replace(/[$,%()]/g,''));
+        const nv = parseDollarCell(cell);
         if ((hdr.includes('change')||hdr.includes('gain')||hdr.includes('loss'))&&!isNaN(nv)&&nv!==0)
           td.className = nv > 0 ? 'up' : 'down';
         td.textContent = cell;
@@ -855,8 +884,8 @@ function renderPortfolio(sc=-1) {
   const chgIdx = headers.findIndex(h=>/day.?change.?\$/i.test(h));
   let totalMV=0, totalChg=0;
   rows.forEach(r=>{
-    if (mvIdx>=0)  { const v=parseFloat(String(r[mvIdx]).replace(/[$,()]/g,'')); if(!isNaN(v)) totalMV+=v; }
-    if (chgIdx>=0) { const v=parseFloat(String(r[chgIdx]).replace(/[$,()]/g,'')); if(!isNaN(v)) totalChg+=v; }
+    if (mvIdx>=0)  { const v=parseDollarCell(r[mvIdx]);  if(!isNaN(v)) totalMV+=v; }
+    if (chgIdx>=0) { const v=parseDollarCell(r[chgIdx]); if(!isNaN(v)) totalChg+=v; }
   });
   let s=`<div>POSITIONS: <span class="sv">${rows.length}</span></div>`;
   if (totalMV)  s+=`<div>TOTAL MV: <span class="sv">$${totalMV.toLocaleString('en-US',{maximumFractionDigits:0})}</span></div>`;
@@ -905,13 +934,13 @@ function renderTopMovers() {
     return showEmpty('DAY-CHANGE COLUMN NOT FOUND IN EXPORT');
 
   const parsed = rows.map(r => {
-    const pctRaw = parseFloat(String(r[dayPctIdx]).replace(/[%,\s]/g,''));
-    if (isNaN(pctRaw)) return null;
-    const dol = dayDolIdx >= 0 ? parseFloat(String(r[dayDolIdx]).replace(/[$,()\s]/g,'')) : NaN;
+    const pct = parsePctCell(r[dayPctIdx]);
+    if (isNaN(pct)) return null;
+    const dol = dayDolIdx >= 0 ? parseDollarCell(r[dayDolIdx]) : NaN;
     return {
       sym:    r[symIdx],
       desc:   descIdx >= 0 ? r[descIdx] : '',
-      pct:    pctRaw * 100,
+      pct,
       dollar: isNaN(dol) ? null : dol,
     };
   }).filter(x => x && !isNaN(x.pct));
