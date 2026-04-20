@@ -403,7 +403,8 @@ function parseDollarCell(cell) {
 // ═══════════════════════════════════════════════════════════════════
 async function apiQuotes(symbols) {
   try {
-    const r = await fetch(`${BASE}/api/quotes?s=${encodeURIComponent(symbols.join(','))}`);
+    const r = await fetch(`${BASE}/api/quotes?s=${encodeURIComponent(symbols.join(','))}`,
+                          { signal: AbortSignal.timeout(25000) });
     if (!r.ok) return {};
     return await r.json();
   } catch { return {}; }
@@ -411,7 +412,8 @@ async function apiQuotes(symbols) {
 
 async function apiHistory(symbols) {
   try {
-    const r = await fetch(`${BASE}/api/history?s=${encodeURIComponent(symbols.join(','))}`);
+    const r = await fetch(`${BASE}/api/history?s=${encodeURIComponent(symbols.join(','))}`,
+                          { signal: AbortSignal.timeout(60000) });
     if (!r.ok) return {};
     return await r.json();
   } catch { return {}; }
@@ -1182,19 +1184,29 @@ function restartTimers() {
   refreshTimer = setInterval(fetchAllData, CFG.interval*1000);
 }
 
+let _fetching = false;
 async function fetchAllData() {
-  document.getElementById('h-updated').textContent = '...';
-  await checkServer();
-  if (serverOk) {
-    const jobs = [updateIndices(), updateMarket(), updateYields()];
-    if (portfolio) {
-      jobs.push(updatePortfolioLive());
-      jobs.push(loadPerformance());
+  // Overlap guard: with a 100-symbol portfolio the history/quote batch can
+  // exceed the refresh interval. Without this, setInterval would pile up
+  // concurrent fetches, flood yfinance and eventually hang the local server.
+  if (_fetching) return;
+  _fetching = true;
+  try {
+    document.getElementById('h-updated').textContent = '...';
+    await checkServer();
+    if (serverOk) {
+      const jobs = [updateIndices(), updateMarket(), updateYields()];
+      if (portfolio) {
+        jobs.push(updatePortfolioLive());
+        jobs.push(loadPerformance());
+      }
+      await Promise.all(jobs);
     }
-    await Promise.all(jobs);
+    document.getElementById('h-updated').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
+    cdLeft = CFG.interval;
+  } finally {
+    _fetching = false;
   }
-  document.getElementById('h-updated').textContent = new Date().toLocaleTimeString('en-US',{hour12:false});
-  cdLeft = CFG.interval;
 }
 
 // ═══════════════════════════════════════════════════════════════════

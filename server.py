@@ -67,13 +67,21 @@ def get_quotes(symbols):
     if cached is not None:
         return cached
 
+    # Per-symbol timeout via as_completed — a single hung ticker can't
+    # starve the whole request, the rest still come back.
     result = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
         futures = {ex.submit(_quote_one, sym): sym for sym in symbols}
-        for fut in concurrent.futures.as_completed(futures, timeout=20):
-            sym, data = fut.result()
-            if data:
-                result[sym] = data
+        try:
+            for fut in concurrent.futures.as_completed(futures, timeout=20):
+                try:
+                    sym, data = fut.result()
+                    if data:
+                        result[sym] = data
+                except Exception:
+                    pass
+        except concurrent.futures.TimeoutError:
+            pass  # return whatever we got within 20s
 
     cache_set(key, result)
     return result
