@@ -859,12 +859,13 @@ function renderPortfolio(sc=-1) {
   // All columns except the symbol column (it goes first)
   const otherIdxs = headers.map((_,i) => i).filter(i => i !== symIdx);
 
-  // Build colMap: visual index → data index, or negative sentinel for perf cols:
-  //   -1 = DAY% (not sortable), -2 = WEEK%, -3 = MONTH%, -4 = YTD%, -5 = 1YR%
+  // Build colMap: visual index → data index, or negative sentinel for virtual cols:
+  //   -2..-5 = WEEK/MONTH/YTD/1YR %  (filled from lastPerfData)
+  //   -6     = promoted DAY %        (filled from lastQuotes, Schwab fallback)
   colMap = [];
   if (symIdx >= 0) {
     colMap.push(symIdx);   // 0: Symbol
-    colMap.push(-1);       // 1: DAY %
+    colMap.push(-6);       // 1: DAY %
     colMap.push(-2);       // 2: WEEK %
     colMap.push(-3);       // 3: MONTH %
     colMap.push(-4);       // 4: YTD %
@@ -878,24 +879,78 @@ function renderPortfolio(sc=-1) {
   // perf key by sentinel value
   const perfKeys = {'-2':'weekChg', '-3':'monthChg', '-4':'ytdChg', '-5':'yearChg'};
 
-  // Sort: sc >= 0 → data column; sc <= -2 → perf column via lastPerfData
+  // ── Sort helpers ──────────────────────────────────────────────
+  // Numeric sort that correctly handles Schwab's parenthesised negatives
+  // "(1.94%)" → -1.94, strips $/%/,/spaces, parseFloat otherwise.
+  const sortNum = (cell) => {
+    if (cell == null) return NaN;
+    const s = String(cell).trim();
+    if (!s || s === '--') return NaN;
+    const neg = /^\(.*\)$/.test(s);
+    const n = parseFloat(s.replace(/[$,%\s()]/g, ''));
+    if (isNaN(n)) return NaN;
+    return neg ? -Math.abs(n) : n;
+  };
+  // When lastQuotes is available, sort live-driven columns by the values the
+  // user actually sees (price × qty, changePct, etc.) — not the frozen Schwab
+  // snapshot. Returns NaN for columns that don't have a live equivalent so
+  // the caller falls back to sortNum on the raw cell.
+  const qtyIdxS = headers.findIndex(h => /^(quantity|qty|shares)$/i.test(String(h).trim()));
+  const cbIdxS  = headers.findIndex(h => /cost.?basis/i.test(h));
+  const liveVal = (row, dataCol) => {
+    if (!lastQuotes || symIdx < 0) return NaN;
+    const q = lastQuotes[row[symIdx]];
+    if (!q) return NaN;
+    const hdr = String(headers[dataCol] || '').trim();
+    const qty = qtyIdxS >= 0 ? parseFloat(String(row[qtyIdxS]).replace(/[,\s]/g, '')) : NaN;
+    if (/^(?:last\s*)?price$/i.test(hdr))  return q.price;
+    if (/market.?value/i.test(hdr))        return !isNaN(qty) ? q.price * qty : NaN;
+    if (/day.?change.*%/i.test(hdr))       return q.changePct;
+    if (/day.?change.?\$/i.test(hdr))      return !isNaN(qty) ? q.change * qty : NaN;
+    if (/price.?change.*%/i.test(hdr))     return q.changePct;
+    if (/price.?change.?\$/i.test(hdr))    return q.change;
+    if (cbIdxS >= 0 && !isNaN(qty)) {
+      const cb = parseDollarCell(row[cbIdxS]);
+      if (!isNaN(cb)) {
+        const gl = q.price * qty - cb;
+        if (/gain.?loss.?\$/i.test(hdr))   return gl;
+        if (/gain.?loss.*%/i.test(hdr))    return cb !== 0 ? gl / Math.abs(cb) * 100 : NaN;
+      }
+    }
+    return NaN;
+  };
+  const cmpNum = (av, bv) => {
+    const aN = isNaN(av), bN = isNaN(bv);
+    if (aN && bN) return 0;
+    if (aN) return 1;   // NaNs always sink to bottom
+    if (bN) return -1;
+    return sortAsc ? av - bv : bv - av;
+  };
+
+  // Sort: sc >= 0 → data column (live-aware); sc = -6 → promoted DAY %;
+  //       sc in [-2..-5] → perf column via lastPerfData
   let display = [...rows];
   if (sc >= 0 && sc < headers.length) {
-    display.sort((a,b)=>{
-      const av=parseFloat(String(a[sc]).replace(/[$,%()]/g,''));
-      const bv=parseFloat(String(b[sc]).replace(/[$,%()]/g,''));
-      if (!isNaN(av)&&!isNaN(bv)) return sortAsc?av-bv:bv-av;
-      return sortAsc?String(a[sc]).localeCompare(String(b[sc])):String(b[sc]).localeCompare(String(a[sc]));
+    display.sort((a,b) => {
+      let av = liveVal(a, sc); if (isNaN(av)) av = sortNum(a[sc]);
+      let bv = liveVal(b, sc); if (isNaN(bv)) bv = sortNum(b[sc]);
+      if (!isNaN(av) && !isNaN(bv)) return cmpNum(av, bv);
+      return sortAsc ? String(a[sc]).localeCompare(String(b[sc])) : String(b[sc]).localeCompare(String(a[sc]));
     });
-  } else if (sc <= -2 && lastPerfData && symIdx >= 0) {
+  } else if (sc === -6 && symIdx >= 0) {
+    display.sort((a,b) => {
+      const qa = (lastQuotes||{})[a[symIdx]];
+      const qb = (lastQuotes||{})[b[symIdx]];
+      const av = qa ? qa.changePct : (dayPctIdx >= 0 ? parsePctCell(a[dayPctIdx]) : NaN);
+      const bv = qb ? qb.changePct : (dayPctIdx >= 0 ? parsePctCell(b[dayPctIdx]) : NaN);
+      return cmpNum(av, bv);
+    });
+  } else if (sc <= -2 && sc >= -5 && lastPerfData && symIdx >= 0) {
     const key = perfKeys[String(sc)];
-    display.sort((a,b)=>{
-      const av = lastPerfData[a[symIdx]]?.[key] ?? null;
-      const bv = lastPerfData[b[symIdx]]?.[key] ?? null;
-      if (av === null && bv === null) return 0;
-      if (av === null) return 1;
-      if (bv === null) return -1;
-      return sortAsc ? av - bv : bv - av;
+    display.sort((a,b) => {
+      const av = lastPerfData[a[symIdx]]?.[key];
+      const bv = lastPerfData[b[symIdx]]?.[key];
+      return cmpNum(av == null ? NaN : av, bv == null ? NaN : bv);
     });
   }
 
