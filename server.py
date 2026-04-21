@@ -47,14 +47,46 @@ def _quote_one(sym):
     """Fetch a single symbol's current quote via fast_info."""
     try:
         with _yahoo_sem:
-            fi    = yf.Ticker(sym).fast_info
+            tkr   = yf.Ticker(sym)
+            fi    = tkr.fast_info
             price = fi.last_price
             prev  = fi.previous_close
-        if price is None or prev is None:
-            return sym, None
-        import math
-        if math.isnan(price) or math.isnan(prev) or prev == 0:
-            return sym, None
+            if price is None or prev is None:
+                return sym, None
+            import math
+            if math.isnan(price) or math.isnan(prev) or prev == 0:
+                return sym, None
+
+            # On split-day Yahoo reports post-split last_price but still
+            # serves pre-split previous_close (and pre-split historical
+            # Close), so the implied change is fake (-87% for VGT's 8:1,
+            # -83% for VUG's 6:1). Auto-detect the split ratio from the
+            # prev/price gap and unwind it; fall back to auto_adjusted
+            # history if the ratio doesn't match a common split.
+            implied_pct = (price - prev) / prev * 100
+            if abs(implied_pct) > 30 and price > 0 and prev > 0:
+                fwd = prev / price   # 8.0 for an 8:1 forward split
+                rev = price / prev   # 10.0 for a 1:10 reverse split
+                adjusted = False
+                for n in (2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20):
+                    if abs(fwd - n) / n < 0.03:
+                        prev = prev / n
+                        adjusted = True
+                        break
+                    if abs(rev - n) / n < 0.03:
+                        prev = prev * n
+                        adjusted = True
+                        break
+                if not adjusted:
+                    try:
+                        h = tkr.history(period='10d', auto_adjust=True)
+                        if len(h) >= 2:
+                            adj_prev = float(h['Close'].iloc[-2])
+                            if adj_prev and not math.isnan(adj_prev) and adj_prev > 0:
+                                prev = adj_prev
+                    except Exception:
+                        pass
+
         chg = price - prev
         return sym, {
             'price':     round(float(price), 6),
