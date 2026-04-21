@@ -689,6 +689,15 @@ function findSymbolCol(headers) {
   return i;
 }
 
+// CUSIPs are 9-char alphanumeric identifiers used by Schwab for bonds,
+// alt investments, escrows and contra positions — Yahoo has no data for
+// them, so we skip them from live-quote and history calls and render a
+// dash instead of a permanent spinner.
+function looksLikeCusip(sym) {
+  const s = String(sym || '').trim().toUpperCase();
+  return /^[A-Z0-9]{8,9}$/.test(s) && /[0-9]/.test(s);
+}
+
 async function loadPerformance() {
   if (!portfolio) return;
   if (!serverOk) { await checkServer(); if (!serverOk) return; }
@@ -700,29 +709,34 @@ async function loadPerformance() {
     return;
   }
 
-  const symbols = [...new Set(
+  const all = [...new Set(
     portfolio.rows.map(r => r[symIdx]).filter(s => s && !/^--|^$/.test(s.trim()))
   )];
+  const symbols    = all.filter(s => !looksLikeCusip(s));
+  const cusipCount = all.length - symbols.length;
+  const cusipTail  = cusipCount ? ` · ${cusipCount} CUSIPs skipped (no Yahoo data)` : '';
 
   if (!symbols.length) {
-    setPerfStatus('No symbols found in Symbol column');
+    setPerfStatus(cusipCount
+      ? `${cusipCount} CUSIP positions — no market data via Yahoo`
+      : 'No symbols found in Symbol column');
     return;
   }
 
-  setPerfStatus(`Loading performance for ${symbols.length} symbols...`);
+  setPerfStatus(`Loading performance for ${symbols.length} ticker${symbols.length===1?'':'s'}${cusipTail}...`);
   console.log('Fetching history for:', symbols.slice(0,5), '...');
 
   const data = await apiHistory(symbols);
   const count = Object.keys(data).length;
 
   if (!count) {
-    setPerfStatus(`Server returned no history data. Check console.`);
+    setPerfStatus(`No history returned for ${symbols.length} ticker${symbols.length===1?'':'s'}${cusipTail}`);
     console.error('apiHistory returned empty. Symbols sent:', symbols.slice(0,5));
     return;
   }
 
   updatePerfCells(data, symIdx);
-  setPerfStatus(`Performance loaded for ${count}/${symbols.length} symbols`);
+  setPerfStatus(`Performance loaded: ${count}/${symbols.length} ticker${symbols.length===1?'':'s'}${cusipTail}`);
 }
 
 function setPerfStatus(msg) {
@@ -757,7 +771,8 @@ async function updatePortfolioLive() {
   const symIdx = findSymbolCol(portfolio.headers);
   if (symIdx < 0) return;
   const symbols = [...new Set(
-    portfolio.rows.map(r => r[symIdx]).filter(s => s && !/^--|^$/.test(String(s).trim()))
+    portfolio.rows.map(r => r[symIdx])
+      .filter(s => s && !/^--|^$/.test(String(s).trim()) && !looksLikeCusip(s))
   )];
   if (!symbols.length) return;
   const data = await apiQuotes(symbols);
@@ -990,10 +1005,13 @@ function renderPortfolio(sc=-1) {
       tr.appendChild(tdDay);
 
       // WEEK / MONTH / YTD / 1YR perf cells (filled by loadPerformance)
+      const isCusipRow = looksLikeCusip(row[symIdx]);
       [0,1,2,3].forEach(ci => {
         const td = document.createElement('td');
         td.setAttribute('data-perf', ci);
-        td.innerHTML = '<span class="flat blink">...</span>';
+        td.innerHTML = isCusipRow
+          ? '<span class="flat">—</span>'
+          : '<span class="flat blink">...</span>';
         tr.appendChild(td);
       });
 
