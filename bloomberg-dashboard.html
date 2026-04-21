@@ -652,7 +652,49 @@ function parseSchwab(raw, fname) {
   }
   if (!rows.length) { alert('No position data found'); return; }
 
-  portfolio = { headers, rows:rows.slice(0,100), fname, loaded:new Date().toISOString() };
+  // Keep only equities and ETFs (drop bonds / alts / MMFs / mutual funds
+  // / options / cash), then rank by market value and take the top 100.
+  const typeIdx = headers.findIndex(h => /security.?type/i.test(h));
+  const mvIdx   = headers.findIndex(h => /market.?value/i.test(h));
+  const totalCount = rows.length;
+  let droppedCount = 0;
+
+  let filtered = rows;
+  if (typeIdx >= 0) {
+    const isEquityOrETF = (t) => {
+      const s = String(t || '').trim().toLowerCase();
+      return /equity/.test(s) || /\betf\b/.test(s) || /exchange.?traded/.test(s);
+    };
+    filtered = rows.filter(r => isEquityOrETF(r[typeIdx]));
+    droppedCount = totalCount - filtered.length;
+  } else {
+    console.warn('Security Type column not found — keeping all rows. Headers:', headers);
+  }
+
+  if (!filtered.length) {
+    alert(typeIdx >= 0
+      ? `No Equity or ETF positions found (${totalCount} rows were all bonds / alts / cash).`
+      : 'No position data found');
+    return;
+  }
+
+  if (mvIdx >= 0) {
+    filtered = filtered.slice().sort((a, b) => {
+      const av = parseDollarCell(a[mvIdx]);
+      const bv = parseDollarCell(b[mvIdx]);
+      if (isNaN(av) && isNaN(bv)) return 0;
+      if (isNaN(av)) return 1;
+      if (isNaN(bv)) return -1;
+      return bv - av;   // descending
+    });
+  } else {
+    console.warn('Market Value column not found — keeping file order. Headers:', headers);
+  }
+
+  const top = filtered.slice(0, 100);
+  console.log(`parseSchwab: ${totalCount} rows → ${filtered.length} equity/ETF → top ${top.length} by MV (${droppedCount} non-equity dropped)`);
+
+  portfolio = { headers, rows:top, fname, loaded:new Date().toISOString() };
   localStorage.setItem('schwabPortfolio', JSON.stringify(portfolio));
   renderPortfolio();
   loadPerformance();
