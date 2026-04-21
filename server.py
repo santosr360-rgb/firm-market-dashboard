@@ -19,6 +19,12 @@ import concurrent.futures
 PORT = 8765
 DIR  = os.path.dirname(os.path.abspath(__file__))
 
+# Global Yahoo-connection cap — bounds concurrency across ALL in-flight
+# /api/quotes calls (client fires up to 3 in parallel: indices, commodities,
+# portfolio). Keeps us under Yahoo's per-client rate limit regardless of how
+# many endpoints the browser hits at once.
+_yahoo_sem = threading.Semaphore(6)
+
 # ── Simple in-memory cache ────────────────────────────────────
 _cache = {}
 def cache_get(key, ttl):
@@ -40,9 +46,10 @@ except ImportError:
 def _quote_one(sym):
     """Fetch a single symbol's current quote via fast_info."""
     try:
-        fi    = yf.Ticker(sym).fast_info
-        price = fi.last_price
-        prev  = fi.previous_close
+        with _yahoo_sem:
+            fi    = yf.Ticker(sym).fast_info
+            price = fi.last_price
+            prev  = fi.previous_close
         if price is None or prev is None:
             return sym, None
         import math
@@ -69,8 +76,14 @@ def get_quotes(symbols):
 
     # Per-symbol timeout via as_completed — a single hung ticker can't
     # starve the whole request, the rest still come back.
+    # max_workers=4: Yahoo rate-limits aggressive parallel fast_info callers.
+    # With 16+ symbols per batch × 3 concurrent /api/quotes endpoints (indices,
+    # commodities, portfolio), 12 workers multiplied into ~36 simultaneous
+    # connections and Yahoo started returning empty responses. 4 is the
+    # sweet spot — still fast (16 symbols in ~4 rounds ≈ 3–5s) and safely
+    # under Yahoo's threshold.
     result = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
         futures = {ex.submit(_quote_one, sym): sym for sym in symbols}
         try:
             for fut in concurrent.futures.as_completed(futures, timeout=20):
